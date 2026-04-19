@@ -49,7 +49,9 @@ fi
 # 2. Actualización de Sistema y Dependencias
 echo -e "${CYAN}[1/6] Actualizando sistema y paquetes críticos...${NC}"
 apt update && apt upgrade -y
-apt install -y curl git mergerfs snapraid smartmontools nginx wireguard ufshcd-utils lsblk htop ufw
+# Usamos || true para que un solo paquete rebelde no detenga toda la instalación
+apt install -y curl git mergerfs snapraid smartmontools nginx wireguard lsblk htop ufw || true
+
 
 # 3. Instalación de Docker
 if ! [ -x "$(command -v docker)" ]; then
@@ -74,11 +76,11 @@ INSTALL_DIR="/opt/homepinas"
 echo -e "${CYAN}[4/6] Configurando archivos de la aplicación en $INSTALL_DIR...${NC}"
 
 mkdir -p $INSTALL_DIR
-# Si este script se ejecuta desde el repo, copiamos. Si no, clonamos.
+# Si este script se ejecuta desde el repo, copiamos. Si no, clonamos vía HTTPS público.
 if [ -d "./src" ]; then
     cp -r . $INSTALL_DIR/
 else
-    git clone https://github.com/user/homepinas.git $INSTALL_DIR
+    git clone https://github.com/virtuspro28/dashboard.git $INSTALL_DIR
 fi
 
 cd $INSTALL_DIR
