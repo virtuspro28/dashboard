@@ -1,0 +1,66 @@
+[
+  {
+    "id": "plex",
+    "name": "Plex Media Server",
+    "description": "Organiza tus bibliotecas de video, música y fotos para verlas en cualquier dispositivo.",
+    "icon": "Play",
+    "image": "linuxserver/plex:latest",
+    "category": "Media",
+    "port": 32400,
+    "env": {
+      "VERSION": "docker"
+    }
+  },
+  {
+    "id": "pihole",
+    "name": "Pi-hole",
+    "description": "Bloqueador de publicidad a nivel de red para toda tu casa.",
+    "icon": "Shield",
+    "image": "pihole/pihole:latest",
+    "category": "Network",
+    "port": 80,
+    "env": {
+      "TZ": "Europe/Madrid"
+    }
+  },
+  {
+    "id": "transmission",
+    "name": "Transmission",
+    "description": "Cliente BitTorrent ligero y potente con interfaz web.",
+    "icon": "Download",
+    "image": "linuxserver/transmission:latest",
+    "category": "Download",
+    "port": 9091,
+    "env": {}
+  },
+  {
+    "id": "threadfin",
+    "name": "Threadfin",
+    "description": "Proxy M3U para Plex/Emby/Jellyfin, sucesor de xTeVe.",
+    "icon": "Tv",
+    "image": "fuzzymistborn/threadfin:latest",
+    "category": "Network",
+    "port": 34400,
+    "env": {}
+  },
+  {
+    "id": "airdcpp",
+    "name": "AirDC++",
+    "description": "Cliente avanzado para redes Direct Connect, ideal para compartir archivos en LAN.",
+    "icon": "Share2",
+    "image": "linuxserver/airdcpp:latest",
+    "category": "Download",
+    "port": 5600,
+    "env": {}
+  },
+  {
+    "id": "dispatcher",
+    "name": "Home Assistant",
+    "description": "El cerebro de tu casa inteligente. Controla todo desde un solo lugar.",
+    "icon": "Home",
+    "image": "homeassistant/home-assistant:stable",
+    "category": "Tools",
+    "port": 8123,
+    "env": {}
+  }
+]

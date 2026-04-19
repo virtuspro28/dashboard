@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  // Reutilizamos la misma base de datos generada en la Fase 2
+  url      = "file:../data/homepinas.db"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  password     String   // Se almacenará hasheada
+  role         String   @default("ADMIN") // ADMIN, USER, VIEWER
+  storageQuota Float    @default(0)       // Cupo en bytes (0 = ilimitado)
+  createdAt    DateTime @default(now())
+}
+
+model BackupTask {
+  id              String   @id @default(uuid())
+  machineName     String   @unique // Para agentes remotos, será su hostname. Para locales, un nombre descriptivo.
+  sourcePath      String?  // Nuevo: Origen local (ej: /mnt/storage/fotos)
+  destinationPath String?  // Nuevo: Destino local/USB (ej: /media/backup_disk)
+  schedule        String?  // Nuevo: DAILY, WEEKLY, MONTHLY, MANUAL
+  taskType        String   @default("AGENT") // AGENT, RSYNC_LOCAL, RSYNC_USB
+  lastBackup      DateTime?
+  status          String   @default("idle") // idle, running, success, failed
+  storagePath     String?  // Mantenemos por retrocompatibilidad con agentes
+  logs            BackupLog[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+
+model BackupLog {
+  id           String   @id @default(uuid())
+  taskId       String
+  task         BackupTask @relation(fields: [taskId], references: [id])
+  timestamp    DateTime @default(now())
+  status       String   // success, failed
+  details      String?
+
+  @@index([taskId])
+  @@index([timestamp])
+}
+
+
+model NotificationConfig {
+  id                String   @id @default("global")
+  telegramEnabled   Boolean  @default(false)
+  telegramToken     String?
+  telegramChatId    String?
+  discordEnabled    Boolean  @default(false)
+  discordWebhookUrl String?
+  tempThreshold     Float    @default(75.0)
+  updatedAt         DateTime @updatedAt
+}
+
+model NotificationActivity {
+  id        String   @id @default(uuid())
+  message   String
+  level     String   // INFO, WARNING, CRITICAL
+  category  String   @default("SYSTEM") // SECURITY, STORAGE, POWER, SYSTEM, DOCKER
+  isRead    Boolean  @default(false)
+  timestamp DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([category])
+  @@index([level])
+}
+
+
+model StoragePool {
+  id          String   @id @default("global")
+  lastSync    DateTime?
+  lastScrub   DateTime?
+  status      String   @default("idle") // idle, syncing, scrubbing, error
+  progress    Int      @default(0)
+  updatedAt   DateTime @updatedAt
+}
+
+model VpnClient {
+  id         String   @id @default(uuid())
+  name       String
+  publicKey  String
+  privateKey String?  // Solo se guarda para la descarga inicial
+  address    String   @unique // IP interna VPN (ej 10.0.0.2)
+  createdAt  DateTime @default(now())
+}
+
+model ProxyDomain {
+  id         String   @id @default(uuid())
+  domain     String   @unique
+  targetPort Int
+  sslEnabled Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model SecurityConfig {
+  id               String   @id @default("global")
+  firewallEnabled  Boolean  @default(true)
+  fail2banEnabled  Boolean  @default(true)
+  blockedCountries String   @default("") // CSV de códigos de país (ej: CN,RU)
+  updatedAt        DateTime @updatedAt
+}
+
+model PowerEvent {
+  id        String   @id @default(uuid())
+  type      String   // AC_RESTORED, ON_BATTERY, LOW_BATTERY, SHUTDOWN_INITIATED
+  message   String
+  timestamp DateTime @default(now())
+}
