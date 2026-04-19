@@ -17,7 +17,10 @@ import { logger } from "../utils/logger.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { getDatabase } from "../database/connection.js";
 import { TelemetryService } from "../services/telemetry.service.js";
+import { promisify } from "node:util";
+import { getSystemStats, getHardwareInfo } from "../modules/system-monitor.js";
 
+const execAsync = promisify(exec);
 const router = Router();
 const log = logger.child("system-routes");
 

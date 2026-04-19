@@ -35,6 +35,7 @@ import {
 import apiRouter from "./routes/index.js";
 import { startSystemWatcher } from "./modules/system-watcher.js";
 import { HardwareService } from "./services/hardware.service.js";
+import { BackupService } from './services/backup.service.js';
 
 const log = logger.child("server");
 
