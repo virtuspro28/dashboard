@@ -2,7 +2,7 @@ import { getSystemStats } from './system-monitor.js';
 import { NotificationService } from '../services/notification.service.js';
 import { config } from '../config/index.js';
 import { TelemetryService } from '../services/telemetry.service.js';
-
+import { logger } from '../utils/logger.js';
 const log = logger.child('system-watcher');
 
 const CHECK_INTERVAL_MS = 1000 * 60 * 5; // Cada 5 minutos
@@ -39,10 +39,7 @@ export function startSystemWatcher() {
             lastAlertTimestamp = now;
           }
         }
-      if (temp !== null) {
-        // ... (temperatura logic)
       }
-
       // Pushing network data to history buffer
       if (stats.network) {
         TelemetryService.pushNetworkData(stats.network.rxSpeed, stats.network.txSpeed);
