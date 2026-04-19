@@ -91,10 +91,13 @@ if [ -d "./src" ] && [ -f "package.json" ]; then
     cp -r . $INSTALL_DIR/
 else
     if [ -d "$INSTALL_DIR/.git" ]; then
-        echo -e "${YELLOW}El directorio ya existe. Actualizando repositorio...${NC}"
+        echo -e "${YELLOW}El directorio ya existe. Forzando actualización completa...${NC}"
         cd $INSTALL_DIR
-        git fetch --all
+        git fetch origin
+        git checkout main
         git reset --hard origin/main
+        git clean -fd
+        echo -e "${GREEN}✔ Repositorio actualizado al commit: $(git rev-parse --short HEAD)${NC}"
     else
         echo -e "${YELLOW}Limpiando instalación previa fallida...${NC}"
         rm -rf $INSTALL_DIR
