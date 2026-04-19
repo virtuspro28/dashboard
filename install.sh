@@ -145,7 +145,7 @@ EOF
 
 systemctl daemon-reload
 systemctl enable homepinas
-systemctl start homepinas
+systemctl restart homepinas
 
 # 7. Configuración de Nginx
 echo -e "${CYAN}[6/6] Configurando servidor web Nginx (Puerto 80)...${NC}"
