@@ -107,7 +107,7 @@ export default function BackupManager() {
           </div>
         </div>
         <button 
-          onClick={() => setShowAdd(true)}
+          onClick={() => alert('Próximamente')}
           className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black transition-all shadow-lg shadow-blue-600/20"
         >
           <Plus className="w-5 h-5" />

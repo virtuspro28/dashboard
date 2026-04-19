@@ -13,7 +13,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   // Si aún está cargando el AuthContext, el componente AuthProvider 
   // ya muestra el spinner global, así que aquí no deberíamos ver nada 
   // a menos que se use fuera del AuthProvider.
-  if (loading) {
+  if (isLoading) {
     return null; 
   }
 
