@@ -1,4 +1,8 @@
 import { useState, useEffect } from 'react';
+import { 
+  Activity,
+  Cpu,
+  RefreshCw,
   Terminal, 
   X, 
   Zap,
