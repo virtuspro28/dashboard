@@ -120,6 +120,9 @@ cd ..
 echo -e "${CYAN}Inicializando base de datos Prisma...${NC}"
 npx prisma db push
 
+echo -e "${CYAN}Compilando Backend (TypeScript)...${NC}"
+npm run build
+
 # 6. Configuración de Systemd
 echo -e "${CYAN}[5/6] Configurando persistencia con Systemd...${NC}"
 cat <<EOF > /etc/systemd/system/homepinas.service
