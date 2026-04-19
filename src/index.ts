@@ -21,7 +21,11 @@ import { createServer } from "node:http";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { Server as SocketServer } from "socket.io";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 /* ─── Módulos internos ─── */
 import { config } from "./config/index.js";
 import { logger } from "./utils/logger.js";
@@ -97,6 +101,14 @@ app.use("/api", apiRouter);
 /* ─── Ruta legacy /health (retrocompatibilidad con Fase 1) ─── */
 app.get("/health", (_req: Request, res: Response) => {
   res.redirect(301, "/api/health");
+});
+
+/* ─── Servir Frontend Estático ─── */
+const frontendPath = path.join(__dirname, "../frontend/dist");
+app.use(express.static(frontendPath));
+
+app.get("*", (req: Request, res: Response) => {
+  res.sendFile(path.join(frontendPath, "index.html"));
 });
 
 /* ═══════════════════════════════════════════════════════════════
