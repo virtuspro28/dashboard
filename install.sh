@@ -110,7 +110,7 @@ npm run build
 cd "$INSTALL_DIR"
 
 npx prisma generate
-npx prisma db push
+npx prisma db push --accept-data-loss
 
 # Compilación del backend con verificación estricta
 echo -e "${CYAN}Compilando Backend...${NC}"

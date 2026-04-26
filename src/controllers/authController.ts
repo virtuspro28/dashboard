@@ -12,8 +12,8 @@ const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: false, // Permitir login por HTTP en red local
   sameSite: "lax" as const,
+  path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000,
-  domain: undefined,
 };
 
 async function getInitialStatusPayload() {
