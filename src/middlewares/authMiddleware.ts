@@ -55,7 +55,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
  * Debe usarse DESPUÉS de requireAuth.
  */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (!req.user || req.user.role !== "ADMIN") {
+  if (!req.user || (req.user.role !== "ADMIN" && req.user.role !== "OWNER")) {
     log.warn(`Acceso administrativo denegado para: ${req.user?.username || "Desconocido"} [IP: ${req.ip}]`);
     res.status(403).json({ success: false, error: "Acceso denegado. Se requieren permisos de Administrador." });
     return;
