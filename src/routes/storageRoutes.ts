@@ -12,6 +12,20 @@ router.use(requireAuth);
 router.get("/disks", getDisks);
 
 /**
+ * GET /api/storage/pools
+ * Lista los pools de almacenamiento configurados
+ */
+router.get("/pools", async (_req, res) => {
+  try {
+    // Por ahora devolvemos un array vacío o simulado si no hay lógica de detección real implementada aún
+    // En el futuro esto leerá de la DB o de archivos de config de mergerfs/zfs
+    const pools: any[] = []; 
+    res.json({ success: true, data: pools });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
  * GET /api/storage/pool/status
  * Obtiene el estado de sincronización y protección del Pool
  */

@@ -31,7 +31,9 @@ import securityRouter from "./security.routes.js";
 import upsRouter from "./ups.routes.js";
 import configRouter from "./config.routes.js";
 import cloudRouter from "./cloud.routes.js";
+import storageRouter from "./storageRoutes.js";
 import hardwareRouter from "./hardware.routes.js";
+
 import { logger } from "../utils/logger.js";
 
 const log = logger.child("router");
@@ -55,7 +57,9 @@ router.use("/security", securityRouter);
 router.use("/ups", upsRouter);
 router.use("/config", configRouter);
 router.use("/cloud", cloudRouter);
+router.use("/storage", storageRouter);
 router.use("/hardware", hardwareRouter);
+
 
 log.info("Rutas API registradas: /api/health, /api/system/*, /api/docker, /api/files, /api/auth, /api/samba, /api/backup, /api/users, /api/store, /api/settings, /api/network, /api/vpn, /api/proxy, /api/security, /api/ups, /api/cloud, /api/hardware");
 

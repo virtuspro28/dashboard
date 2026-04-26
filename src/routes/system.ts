@@ -193,15 +193,66 @@ router.get("/logs", requireAuth, async (_req: Request, res: Response) => {
   }
 });
 
-router.get("/stats", (_req: Request, res: Response) => {
+router.get("/stats", async (_req: Request, res: Response) => {
   try {
     const stats = getSystemStats();
+    
+    // Calcular agregados de disco
+    const mainDisk = stats.disks[0] || { totalGB: 0, usedGB: 0, freeGB: 0, usagePercent: 0 };
+    const healthyDisks = stats.disks.length; // Por ahora asumimos todos sanos si aparecen en df
+
+    // Obtener info de docker
+    let activeContainers = 0;
+    try {
+      const { getContainers } = await import("../services/docker.service.js");
+      const containers = await getContainers();
+      activeContainers = containers.filter(c => c.state === 'running').length;
+    } catch {
+      // Ignorar si docker falla
+    }
+
+    // Formatear uptime
+    const uptimeSec = stats.uptime.system;
+    const days = Math.floor(uptimeSec / 86400);
+    const hours = Math.floor((uptimeSec % 86400) / 3600);
+    const uptimeFormatted = days > 0 ? `${days}d ${hours}h` : `${hours}h`;
+
+    // Mapear al formato que espera el Dashboard.tsx
+    const dashboardStats = {
+      cpu: {
+        usage: stats.cpu.usagePercent,
+        cores: stats.cpu.cores
+      },
+      ram: {
+        percent: stats.memory.usagePercent,
+        usedGb: (stats.memory.usedMB / 1024).toFixed(1),
+        total: (stats.memory.totalMB / 1024).toFixed(1)
+      },
+      storage: {
+        percent: mainDisk.usagePercent,
+        total: mainDisk.totalGB,
+        used: mainDisk.usedGB,
+        totalGb: mainDisk.totalGB,
+        freeGb: mainDisk.freeGB,
+        healthyDisks: healthyDisks
+      },
+      docker: {
+        active: activeContainers
+      },
+      security: {
+        blockedToday: 0 // TODO: Implementar con Fail2Ban service
+      },
+      system: {
+        uptimeFormatted
+      }
+    };
 
     res.status(200).json({
       success: true,
-      data: stats,
+      data: dashboardStats,
     });
   } catch (error: unknown) {
+
     const message = error instanceof Error ? error.message : "Error desconocido";
     log.error(`Error obteniendo stats: ${message}`);
 

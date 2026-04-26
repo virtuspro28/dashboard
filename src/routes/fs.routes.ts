@@ -44,9 +44,10 @@ const upload = multer({
 });
 
 /**
- * [GET] /api/files/browse?path=/folder
+ * [GET] /api/files/list?path=/folder
  */
-router.get("/browse", async (req: Request, res: Response) => {
+router.get("/list", async (req: Request, res: Response) => {
+
   try {
     const targetPath = typeof req.query['path'] === 'string' ? req.query['path'] : '';
     const items = await listFiles(targetPath);

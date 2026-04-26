@@ -287,9 +287,25 @@ export const StoreService = {
 
   async getCatalog(): Promise<AppInventoryItem[]> {
     try {
-      const casaOsApps = await this.getCasaOsCatalog();
+      const now = Date.now();
+      
+      // Intentar obtener de memoria o disco (Caché rápido)
+      const diskCache = await readCasaOsCache();
+      const casaOsApps = (inMemoryCasaOsCatalog && now - inMemoryCasaOsCatalog.updatedAt < CASAOS_CACHE_TTL_MS)
+        ? inMemoryCasaOsCatalog.apps
+        : (diskCache && now - diskCache.updatedAt < CASAOS_CACHE_TTL_MS)
+          ? diskCache.apps
+          : [];
+
+      // Si no hay caché de CasaOS o está expirada, disparamos una sincronización en segundo plano
+      if (casaOsApps.length === 0 || (inMemoryCasaOsCatalog && now - inMemoryCasaOsCatalog.updatedAt > CASAOS_CACHE_TTL_MS)) {
+        log.info("Iniciando sincronización de AppStore en segundo plano...");
+        this.getCasaOsCatalog().catch(err => log.warn("Error en sync de Store (background):", err.message));
+      }
+
       const merged = new Map<string, AppInventoryItem>();
 
+      // Combinar inventario local (siempre disponible) con lo que tengamos de CasaOS
       for (const app of [...appInventory, ...casaOsApps]) {
         merged.set(app.id, app);
       }
@@ -299,9 +315,11 @@ export const StoreService = {
       );
     } catch (error: any) {
       log.errorWithStack("Error obteniendo catálogo", error);
-      throw new Error("No se pudo cargar el catálogo de aplicaciones");
+      // Fallback extremo: devolver solo lo local
+      return [...appInventory];
     }
   },
+
 
   async getInstalledStatus(): Promise<string[]> {
     try {

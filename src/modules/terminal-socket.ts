@@ -42,33 +42,26 @@ export function setupTerminalSocket(io: Server) {
     const shell = os.platform() === "win32" ? "powershell.exe" : "bash";
     const args = os.platform() === "win32" ? [] : ["--login"];
     
-    // Si estamos en Linux y somos root, forzamos login como 'pi' para evitar root automático
-    // El usuario debe usar 'sudo' para acciones administrativas.
-    const finalShell = (os.platform() !== "win32" && process.getuid && process.getuid() === 0) 
-      ? "su" 
-      : shell;
-    
-    const finalArgs = (finalShell === "su") 
-      ? ["-", "pi", "-c", shell] 
-      : args;
-
-    const ptyProcess = pty.spawn(finalShell, finalArgs, {
+    // Si estamos en Linux y somos root, intentamos usar un shell normal
+    // Evitamos forzar 'pi' ya que puede no existir en todas las distros
+    const ptyProcess = pty.spawn(shell, args, {
       name: "xterm-color",
       cols: 80,
       rows: 24,
-      cwd: process.env["HOME"] || "/home/pi",
+      cwd: process.env["HOME"] || (os.platform() === "win32" ? process.cwd() : "/root"),
       env: process.env as any,
     });
 
-    // Enviar datos del PTY al cliente
+    // Enviar datos del PTY al cliente (Frontend espera 'output')
     ptyProcess.onData((data) => {
-      socket.emit("data", data);
+      socket.emit("output", data);
     });
 
-    // Recibir datos del cliente y enviarlos al PTY
-    socket.on("data", (data) => {
+    // Recibir datos del cliente (Frontend envía 'input')
+    socket.on("input", (data) => {
       ptyProcess.write(data);
     });
+
 
     // Manejar redimensionamiento
     socket.on("resize", (size) => {

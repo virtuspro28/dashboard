@@ -32,13 +32,15 @@ export default function Sidebar({ onLogout }: SidebarProps) {
     { name: 'Explorador', icon: FolderLock, path: '/files' },
     { name: 'Compartidos', icon: HardDrive, path: '/shared-folders' },
     { name: 'Almacenamiento', icon: Layers, path: '/storage-pool' },
-    { name: 'Contenedores', icon: Component, path: '/docker' },
+    { name: 'Contenedores', icon: Component, path: '/apps' },
+
     { name: 'Terminal', icon: Terminal, path: '/terminal' },
     { name: 'Red', icon: Globe, path: '/network' },
     { name: 'Acceso Remoto', icon: ShieldCheck, path: '/remote' },
     { name: 'Energía', icon: Zap, path: '/power' },
     { name: 'Seguridad', icon: Shield, path: '/security' },
-    { name: 'Backups', icon: Code, path: '/backups' },
+    { name: 'Backups', icon: Code, path: '/backup' },
+
     { name: 'Respaldos Activos', icon: Activity, path: '/active-backup' },
     { name: 'Eventos', icon: History, path: '/events' },
     { name: 'Usuarios', icon: Users, path: '/users' },
