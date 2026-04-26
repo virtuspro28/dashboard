@@ -155,9 +155,7 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     const token = generateToken(user.id, user.username, user.role);
     const cookieOptions = { ...COOKIE_OPTIONS };
-    if (config.env === "production") {
-      cookieOptions.secure = true;
-    }
+    // Eliminado el override de secure: true en producción para soportar entornos HTTP en LAN.
 
     res.cookie("jwt", token, cookieOptions);
 
