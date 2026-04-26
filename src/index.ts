@@ -167,7 +167,7 @@ httpServer.listen(config.server.port, () => {
 
   console.log("");
   console.log("═══════════════════════════════════════════════════════");
-  console.log("  🏠 HomePiNAS Dashboard v1.0.0");
+  console.log("  🏠 HomePiNAS Dashboard v1.0.1");
   console.log("═══════════════════════════════════════════════════════");
   console.log("");
   console.log(`  ▸ Servidor:       http://${config.server.host}:${config.server.port}`);

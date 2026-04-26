@@ -2,6 +2,9 @@ import { Router, type Request, type Response } from "express";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { PrismaClient } from "@prisma/client";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { UpdateService } from "../services/update.service.js";
 import { logger } from "../utils/logger.js";
 import { requireAuth, requireAdmin } from "../middlewares/authMiddleware.js";
@@ -12,6 +15,19 @@ const execAsync = promisify(exec);
 const router = Router();
 const log = logger.child("system-routes");
 const prisma = new PrismaClient();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const packageJsonPath = path.resolve(__dirname, "../../package.json");
+
+function getPackageVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+    return pkg.version;
+  } catch {
+    return "1.0.0";
+  }
+}
 
 router.post("/reboot", requireAuth, async (_req: Request, res: Response) => {
   try {
@@ -135,6 +151,29 @@ router.delete("/events", requireAuth, requireAdmin, async (_req: Request, res: R
   try {
     await prisma.notificationActivity.deleteMany({});
     res.json({ success: true, message: "Historial de eventos vaciado" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.get("/version", async (_req: Request, res: Response) => {
+  try {
+    let commit = "unknown";
+    if (process.platform !== "win32") {
+      try {
+        const { stdout } = await execAsync("git rev-parse HEAD");
+        commit = stdout.trim();
+      } catch (e) {
+        log.warn("No se pudo obtener el hash de git");
+      }
+    }
+
+    res.json({
+      success: true,
+      local: getPackageVersion(),
+      commit: commit,
+      arch: process.arch,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

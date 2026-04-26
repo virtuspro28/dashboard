@@ -17,29 +17,37 @@ export default function Settings() {
   const [updateLog, setUpdateLog] = useState('');
 
   useEffect(() => {
-    fetch('/api/system/version')
+    fetch('/api/system/version', { credentials: 'include' })
       .then(res => res.json())
-      .then(data => setVersion(data));
+      .then(data => {
+        if (data.success) {
+          setVersion(data);
+        }
+      });
   }, []);
 
   const handleUpdate = async () => {
     setIsUpdating(true);
-    setUpdateLog('Buscando actualizaciones...');
+    setUpdateLog('Iniciando proceso de actualización OTA...\n');
     try {
-      const res = await fetch('/api/system/update', { method: 'POST' });
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('No se pudo leer el stream');
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = new TextDecoder().decode(value);
-        setUpdateLog(prev => prev + text);
+      // Primero aplicamos la actualización
+      const res = await fetch('/api/system/update/apply', { 
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        setUpdateLog(prev => prev + 'Actualización iniciada en el servidor. El sistema se reiniciará en breve.\n');
+      } else {
+        setUpdateLog(prev => prev + 'Error: ' + (data.error || 'Fallo desconocido') + '\n');
       }
     } catch (err) {
-       setUpdateLog(prev => prev + '\nError en la actualización.');
+       setUpdateLog(prev => prev + '\nError de conexión con el servidor.');
     } finally {
-      setIsUpdating(false);
+      // No reseteamos el estado de carga inmediatamente para dar feedback
+      setTimeout(() => setIsUpdating(false), 5000);
     }
   };
 
