@@ -189,7 +189,8 @@ export const HardwareService = {
   },
 
   async getCombinedStatus() {
-    let disks = [];
+    let disks: any[] = [];
+
     try {
       const { DiskService } = await import("./disk.service.js");
       disks = await DiskService.getHealthStatus();
