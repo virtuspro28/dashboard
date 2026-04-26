@@ -61,7 +61,18 @@ router.post("/containers/:id/stop", async (req: Request, res: Response) => {
 router.get("/store/apps", async (_req: Request, res: Response) => {
   try {
     const catalog = await StoreService.getCatalog();
-    const installedList = await StoreService.getInstalledStatus();
+    
+    // Obtener estado de instalación de forma segura sin bloquear si Docker falla
+    let installedList: string[] = [];
+    try {
+      // Timeout de 2 segundos para no bloquear la Store entera
+      installedList = await Promise.race([
+        StoreService.getInstalledStatus(),
+        new Promise<string[]>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+      ]);
+    } catch (e) {
+      log.warn("No se pudo obtener estado de instalacion a tiempo, cargando Store sin marcas de instalado.");
+    }
 
     const appsWithStatus = catalog.map(app => ({
       ...app,
@@ -69,6 +80,7 @@ router.get("/store/apps", async (_req: Request, res: Response) => {
     }));
 
     res.status(200).json({ success: true, data: appsWithStatus });
+
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error listando apps';
     log.error(msg);
