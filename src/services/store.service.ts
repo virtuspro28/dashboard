@@ -312,14 +312,69 @@ export const StoreService = {
 
       const merged = new Map<string, AppInventoryItem>();
 
-      // Combinar inventario local (siempre disponible) con lo que tengamos de CasaOS
-      for (const app of [...appInventory, ...casaOsApps]) {
+      // LISTA DE EMERGENCIA GRABADA A FUEGO
+      const emergencyInventory: AppInventoryItem[] = [
+        {
+          id: "plex",
+          name: "Plex Media Server",
+          description: "Tu servidor de cine y series personal.",
+          icon: "Play",
+          image: "linuxserver/plex:latest",
+          category: "Media",
+          ports: ["32400:32400"],
+          source: "local"
+        },
+        {
+          id: "pihole",
+          name: "Pi-hole",
+          description: "Bloqueador de anuncios para toda la red.",
+          icon: "Shield",
+          image: "pihole/pihole:latest",
+          category: "Network",
+          ports: ["53:53/udp", "8081:80"],
+          source: "local"
+        },
+        {
+          id: "transmission",
+          name: "Transmission",
+          description: "Cliente BitTorrent ligero.",
+          icon: "Download",
+          image: "linuxserver/transmission:latest",
+          category: "Download",
+          ports: ["9091:9091"],
+          source: "local"
+        },
+        {
+          id: "homeassistant",
+          name: "Home Assistant",
+          description: "Domótica avanzada y control de hogar.",
+          icon: "Home",
+          image: "homeassistant/home-assistant:stable",
+          category: "Home",
+          ports: ["8123:8123"],
+          source: "local"
+        },
+        {
+          id: "jellyfin",
+          name: "Jellyfin",
+          description: "Servidor de medios de código abierto.",
+          icon: "Tv",
+          image: "jellyfin/jellyfin:latest",
+          category: "Media",
+          ports: ["8096:8096"],
+          source: "local"
+        }
+      ];
+
+      // Combinar inventario de emergencia con lo que tengamos de CasaOS
+      for (const app of [...emergencyInventory, ...casaOsApps]) {
         merged.set(app.id, app);
       }
 
-      return Array.from(merged.values()).sort((left, right) =>
-        left.name.localeCompare(right.name, "es", { sensitivity: "base" }),
-      );
+      const finalCatalog = Array.from(merged.values());
+      log.info(`Catálogo forzado cargado con ${finalCatalog.length} aplicaciones.`);
+      return finalCatalog;
+
     } catch (error: any) {
       log.errorWithStack("Error obteniendo catálogo", error);
       // Fallback extremo: devolver solo lo local
