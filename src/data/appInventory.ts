@@ -1,20 +1,29 @@
 export interface AppPortMapping {
   host: string;
   container: string;
-  protocol?: "tcp" | "udp";
-  label?: string;
+  protocol?: "tcp" | "udp" | undefined;
+  label?: string | undefined;
 }
 
 export interface AppVolumeMapping {
   host: string;
   container: string;
-  label?: string;
+  label?: string | undefined;
 }
 
 export interface AppEnvVar {
   key: string;
   value: string;
-  label?: string;
+  label?: string | undefined;
+}
+
+export interface AppDefaultConfig {
+  ports: AppPortMapping[];
+  volumes: AppVolumeMapping[];
+  env: AppEnvVar[];
+  networkMode?: string | undefined;
+  privileged?: boolean | undefined;
+  capAdd?: string[] | undefined;
 }
 
 export interface AppInventoryItem {
@@ -22,410 +31,572 @@ export interface AppInventoryItem {
   name: string;
   description: string;
   icon: string;
-  image?: string;
+  image?: string | undefined;
   category: string;
   source: "local" | "custom";
-  developer?: string;
+  developer?: string | undefined;
+  defaultConfig: AppDefaultConfig;
   ports: AppPortMapping[];
   volumes: AppVolumeMapping[];
   env: AppEnvVar[];
-  networkMode?: string;
-  privileged?: boolean;
-  capAdd?: string[];
+  networkMode?: string | undefined;
+  privileged?: boolean | undefined;
+  capAdd?: string[] | undefined;
 }
 
-function configVolume(appId: string, suffix = "config", label = "Config"): AppVolumeMapping {
+const DATA_ROOT = "/opt/homevault/data";
+const DEFAULT_TZ = "Europe/Madrid";
+const DEFAULT_PUID = "1000";
+const DEFAULT_PGID = "1000";
+
+function appDataPath(appId: string, ...segments: string[]): string {
+  return [DATA_ROOT, "apps", appId, ...segments].join("/");
+}
+
+function sharedDataPath(...segments: string[]): string {
+  return [DATA_ROOT, ...segments].join("/");
+}
+
+function envVar(key: string, value: string, label?: string): AppEnvVar {
+  return { key, value, label };
+}
+
+function port(host: string, container: string, label: string, protocol: "tcp" | "udp" = "tcp"): AppPortMapping {
+  return { host, container, label, protocol };
+}
+
+function volume(host: string, container: string, label: string): AppVolumeMapping {
+  return { host, container, label };
+}
+
+function createApp(item: Omit<AppInventoryItem, "ports" | "volumes" | "env">): AppInventoryItem {
   return {
-    host: `/opt/homevault/${appId}/${suffix}`,
-    container: suffix === "config" ? "/config" : `/${suffix}`,
-    label,
+    ...item,
+    ports: item.defaultConfig.ports.map((entry) => ({ ...entry })),
+    volumes: item.defaultConfig.volumes.map((entry) => ({ ...entry })),
+    env: item.defaultConfig.env.map((entry) => ({ ...entry })),
+    networkMode: item.defaultConfig.networkMode,
+    privileged: item.defaultConfig.privileged,
+    capAdd: item.defaultConfig.capAdd ? [...item.defaultConfig.capAdd] : undefined,
   };
 }
 
+function withUserMapping(appId: string, image: string, name: string, description: string, category: string, icon: string, developer: string, config: AppDefaultConfig): AppInventoryItem {
+  const mergedConfig: AppDefaultConfig = {
+    ...config,
+    env: [
+      envVar("PUID", DEFAULT_PUID, "UID del usuario"),
+      envVar("PGID", DEFAULT_PGID, "GID del usuario"),
+      envVar("TZ", DEFAULT_TZ, "Timezone"),
+      ...config.env,
+    ],
+  };
+
+  return createApp({
+    id: appId,
+    name,
+    description,
+    icon,
+    image,
+    category,
+    source: "local",
+    developer,
+    defaultConfig: mergedConfig,
+  });
+}
+
 export const appInventory: AppInventoryItem[] = [
-  {
-    id: "plex",
-    name: "Plex Media Server",
-    description: "Stream your personal media library anywhere: movies, TV, music and photos.",
-    icon: "Play",
-    image: "plexinc/pms-docker:latest",
-    category: "Media",
-    source: "local",
-    developer: "Plex",
-    ports: [{ host: "32400", container: "32400", label: "Web UI" }],
-    volumes: [
-      { host: "/opt/homevault/plex/config", container: "/config", label: "Config" },
-      { host: "/opt/homevault/plex/transcode", container: "/transcode", label: "Transcode temp" },
-      { host: "/mnt/storage/media", container: "/data", label: "Media library" },
-    ],
-    env: [
-      { key: "TZ", value: "Europe/Madrid", label: "Timezone" },
-      { key: "PLEX_CLAIM", value: "", label: "Plex Claim Token (optional)" },
-    ],
-  },
-  {
-    id: "jellyfin",
-    name: "Jellyfin",
-    description: "Free software media system, the volunteer-built alternative to Plex.",
-    icon: "Tv",
-    image: "jellyfin/jellyfin:latest",
-    category: "Media",
-    source: "local",
-    developer: "Jellyfin",
-    ports: [{ host: "8096", container: "8096", label: "Web UI" }],
-    volumes: [
-      { host: "/opt/homevault/jellyfin/config", container: "/config", label: "Config" },
-      { host: "/opt/homevault/jellyfin/cache", container: "/cache", label: "Cache" },
-      { host: "/mnt/storage/media", container: "/media", label: "Media library" },
-    ],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
-    id: "immich",
-    name: "Immich",
-    description: "High-performance self-hosted photo and video management with mobile backup support.",
-    icon: "Image",
-    image: "ghcr.io/immich-app/immich-server:release",
-    category: "Media",
-    source: "local",
-    developer: "Immich",
-    ports: [{ host: "2283", container: "2283", label: "Web UI" }],
-    volumes: [
-      { host: "/opt/homevault/immich/upload", container: "/usr/src/app/upload", label: "Upload library" },
-      { host: "/etc/localtime", container: "/etc/localtime", label: "Localtime" },
-    ],
-    env: [
-      { key: "TZ", value: "Europe/Madrid", label: "Timezone" },
-      { key: "DB_HOSTNAME", value: "", label: "PostgreSQL host" },
-      { key: "DB_USERNAME", value: "", label: "PostgreSQL user" },
-      { key: "DB_PASSWORD", value: "", label: "PostgreSQL password" },
-      { key: "DB_DATABASE_NAME", value: "immich", label: "Database name" },
-      { key: "REDIS_HOSTNAME", value: "", label: "Redis host" },
-    ],
-  },
-  {
-    id: "qbittorrent",
-    name: "qBittorrent",
-    description: "Open-source BitTorrent client with a clean web interface.",
-    icon: "Download",
-    image: "lscr.io/linuxserver/qbittorrent:latest",
-    category: "Download",
-    source: "local",
-    developer: "LinuxServer.io",
-    ports: [
-      { host: "8080", container: "8080", label: "Web UI" },
-      { host: "6881", container: "6881", label: "Torrent TCP" },
-      { host: "6881", container: "6881", protocol: "udp", label: "Torrent UDP" },
-    ],
-    volumes: [
-      { host: "/opt/homevault/qbittorrent/config", container: "/config", label: "Config" },
-      { host: "/mnt/storage/downloads", container: "/downloads", label: "Downloads" },
-    ],
-    env: [
-      { key: "TZ", value: "Europe/Madrid", label: "Timezone" },
-      { key: "WEBUI_PORT", value: "8080", label: "Web UI Port" },
-    ],
-  },
-  {
-    id: "sonarr",
-    name: "Sonarr",
-    description: "Smart PVR for newsgroup and bittorrent users that automates TV show downloads.",
-    icon: "Tv",
-    image: "lscr.io/linuxserver/sonarr:latest",
-    category: "Download",
-    source: "local",
-    developer: "LinuxServer.io",
-    ports: [{ host: "8989", container: "8989", label: "Web UI" }],
-    volumes: [
-      { host: "/opt/homevault/sonarr/config", container: "/config", label: "Config" },
-      { host: "/mnt/storage/tv", container: "/tv", label: "TV library" },
-      { host: "/mnt/storage/downloads", container: "/downloads", label: "Downloads" },
-    ],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
-    id: "radarr",
-    name: "Radarr",
-    description: "Movie collection manager and automatic downloader.",
-    icon: "Film",
-    image: "lscr.io/linuxserver/radarr:latest",
-    category: "Download",
-    source: "local",
-    developer: "LinuxServer.io",
-    ports: [{ host: "7878", container: "7878", label: "Web UI" }],
-    volumes: [
-      { host: "/opt/homevault/radarr/config", container: "/config", label: "Config" },
-      { host: "/mnt/storage/movies", container: "/movies", label: "Movie library" },
-      { host: "/mnt/storage/downloads", container: "/downloads", label: "Downloads" },
-    ],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
-    id: "prowlarr",
-    name: "Prowlarr",
-    description: "Indexer manager and proxy for Sonarr, Radarr and related media apps.",
-    icon: "Search",
-    image: "lscr.io/linuxserver/prowlarr:latest",
-    category: "Download",
-    source: "local",
-    developer: "LinuxServer.io",
-    ports: [{ host: "9696", container: "9696", label: "Web UI" }],
-    volumes: [configVolume("prowlarr")],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
-    id: "overseerr",
-    name: "Overseerr",
-    description: "Request management and media discovery tool for Plex and Jellyfin setups.",
-    icon: "Globe",
-    image: "lscr.io/linuxserver/overseerr:latest",
-    category: "Media",
-    source: "local",
-    developer: "LinuxServer.io",
-    ports: [{ host: "5055", container: "5055", label: "Web UI" }],
-    volumes: [configVolume("overseerr")],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
-    id: "nextcloud",
-    name: "Nextcloud",
-    description: "Self-hosted cloud storage and collaboration platform.",
-    icon: "Cloud",
-    image: "nextcloud:latest",
-    category: "Storage",
-    source: "local",
-    developer: "Nextcloud",
-    ports: [{ host: "8082", container: "80", label: "Web UI" }],
-    volumes: [
-      { host: "/opt/homevault/nextcloud/html", container: "/var/www/html", label: "App data" },
-      { host: "/mnt/storage/cloud", container: "/var/www/html/data", label: "User data" },
-    ],
-    env: [
-      { key: "TZ", value: "Europe/Madrid", label: "Timezone" },
-      { key: "NEXTCLOUD_TRUSTED_DOMAINS", value: "", label: "Trusted domains" },
-    ],
-  },
-  {
-    id: "gitea",
-    name: "Gitea",
-    description: "Lightweight self-hosted Git service with a familiar GitHub-like interface.",
-    icon: "GitBranch",
-    image: "gitea/gitea:latest",
-    category: "Development",
-    source: "local",
-    developer: "Gitea",
-    ports: [
-      { host: "3001", container: "3000", label: "Web UI" },
-      { host: "2222", container: "22", label: "SSH" },
-    ],
-    volumes: [{ host: "/opt/homevault/gitea/data", container: "/data", label: "Data" }],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
+  createApp({
     id: "pihole",
     name: "Pi-hole",
-    description: "Network-wide ad blocking via your own DNS server.",
+    description: "Bloqueo de publicidad y DNS local para toda la red, con panel web y configuración persistente.",
     icon: "Shield",
     image: "pihole/pihole:latest",
     category: "Networking",
     source: "local",
     developer: "Pi-hole",
-    ports: [
-      { host: "8081", container: "80", label: "Web UI" },
-      { host: "53", container: "53", protocol: "tcp", label: "DNS TCP" },
-      { host: "53", container: "53", protocol: "udp", label: "DNS UDP" },
-    ],
-    volumes: [
-      { host: "/opt/homevault/pihole/etc-pihole", container: "/etc/pihole", label: "Pi-hole config" },
-      { host: "/opt/homevault/pihole/etc-dnsmasq.d", container: "/etc/dnsmasq.d", label: "DNSMasq config" },
-    ],
-    env: [
-      { key: "TZ", value: "Europe/Madrid", label: "Timezone" },
-      { key: "WEBPASSWORD", value: "", label: "Web password" },
-    ],
-  },
-  {
+    defaultConfig: {
+      ports: [
+        port("8081", "80", "Web UI"),
+        port("53", "53", "DNS TCP"),
+        port("53", "53", "DNS UDP", "udp"),
+        port("8443", "443", "HTTPS"),
+      ],
+      volumes: [
+        volume(appDataPath("pihole", "etc-pihole"), "/etc/pihole", "Pi-hole data"),
+        volume(appDataPath("pihole", "dnsmasq"), "/etc/dnsmasq.d", "dnsmasq"),
+      ],
+      env: [
+        envVar("TZ", DEFAULT_TZ, "Timezone"),
+        envVar("FTLCONF_webserver_api_password", "", "Password panel web"),
+        envVar("DNSMASQ_LISTENING", "all", "Escucha DNS"),
+      ],
+      capAdd: ["NET_ADMIN"],
+    },
+  }),
+  createApp({
+    id: "adguard-home",
+    name: "AdGuard Home",
+    description: "DNS filtrado con bloqueo de anuncios, malware y control parental desde una interfaz moderna.",
+    icon: "ShieldCheck",
+    image: "adguard/adguardhome:latest",
+    category: "Networking",
+    source: "local",
+    developer: "AdGuard",
+    defaultConfig: {
+      ports: [
+        port("3000", "3000", "Setup UI"),
+        port("8082", "80", "Panel web"),
+        port("53", "53", "DNS TCP"),
+        port("53", "53", "DNS UDP", "udp"),
+        port("8443", "443", "HTTPS"),
+        port("853", "853", "DNS over TLS"),
+      ],
+      volumes: [
+        volume(appDataPath("adguard-home", "work"), "/opt/adguardhome/work", "Work"),
+        volume(appDataPath("adguard-home", "conf"), "/opt/adguardhome/conf", "Config"),
+      ],
+      env: [envVar("TZ", DEFAULT_TZ, "Timezone")],
+    },
+  }),
+  createApp({
+    id: "plex",
+    name: "Plex Media Server",
+    description: "Servidor multimedia para películas, series, música y fotos con clientes en TV, móvil y web.",
+    icon: "Play",
+    image: "plexinc/pms-docker:latest",
+    category: "Media",
+    source: "local",
+    developer: "Plex",
+    defaultConfig: {
+      ports: [port("32400", "32400", "Web UI")],
+      volumes: [
+        volume(appDataPath("plex", "config"), "/config", "Config"),
+        volume(appDataPath("plex", "transcode"), "/transcode", "Transcode"),
+        volume(sharedDataPath("media"), "/data", "Media library"),
+      ],
+      env: [
+        envVar("TZ", DEFAULT_TZ, "Timezone"),
+        envVar("PLEX_CLAIM", "", "Plex Claim Token"),
+      ],
+    },
+  }),
+  createApp({
+    id: "jellyfin",
+    name: "Jellyfin",
+    description: "Alternativa libre a Plex con streaming multimedia, bibliotecas y gestión de usuarios.",
+    icon: "Tv",
+    image: "jellyfin/jellyfin:latest",
+    category: "Media",
+    source: "local",
+    developer: "Jellyfin",
+    defaultConfig: {
+      ports: [port("8096", "8096", "Web UI")],
+      volumes: [
+        volume(appDataPath("jellyfin", "config"), "/config", "Config"),
+        volume(appDataPath("jellyfin", "cache"), "/cache", "Cache"),
+        volume(sharedDataPath("media"), "/media", "Media library"),
+      ],
+      env: [envVar("TZ", DEFAULT_TZ, "Timezone")],
+    },
+  }),
+  withUserMapping(
+    "transmission",
+    "linuxserver/transmission:latest",
+    "Transmission",
+    "Cliente BitTorrent ligero con panel web, cola de descargas y carpeta watch.",
+    "Download",
+    "Download",
+    "LinuxServer.io",
+    {
+      ports: [
+        port("9091", "9091", "Web UI"),
+        port("51413", "51413", "Torrent TCP"),
+        port("51413", "51413", "Torrent UDP", "udp"),
+      ],
+      volumes: [
+        volume(appDataPath("transmission", "config"), "/config", "Config"),
+        volume(sharedDataPath("downloads", "transmission"), "/downloads", "Downloads"),
+        volume(sharedDataPath("downloads", "watch"), "/watch", "Watch"),
+      ],
+      env: [
+        envVar("USER", "homevault", "Usuario panel"),
+        envVar("PASS", "homevault", "Password panel"),
+        envVar("TRANSMISSION_WEB_HOME", "", "Tema web opcional"),
+      ],
+    },
+  ),
+  withUserMapping(
+    "qbittorrent",
+    "linuxserver/qbittorrent:latest",
+    "qBittorrent",
+    "Cliente BitTorrent con búsqueda, límites avanzados y panel web configurable.",
+    "Download",
+    "Download",
+    "LinuxServer.io",
+    {
+      ports: [
+        port("8080", "8080", "Web UI"),
+        port("6881", "6881", "Torrent TCP"),
+        port("6881", "6881", "Torrent UDP", "udp"),
+      ],
+      volumes: [
+        volume(appDataPath("qbittorrent", "config"), "/config", "Config"),
+        volume(sharedDataPath("downloads", "qbittorrent"), "/downloads", "Downloads"),
+      ],
+      env: [envVar("WEBUI_PORT", "8080", "Puerto panel web")],
+    },
+  ),
+  withUserMapping(
+    "airdcpp",
+    "gangefors/airdcpp-webclient:latest",
+    "AirDC++ Web Client",
+    "Cliente DC++ con interfaz web y directorios dedicados para descargas y contenido compartido.",
+    "Download",
+    "Radio",
+    "gangefors",
+    {
+      ports: [
+        port("5600", "5600", "Web UI HTTP"),
+        port("5601", "5601", "Web UI HTTPS"),
+        port("21248", "21248", "Client TCP"),
+        port("21248", "21248", "Client UDP", "udp"),
+        port("21249", "21249", "Encrypted TCP"),
+      ],
+      volumes: [
+        volume(appDataPath("airdcpp", "config"), "/.airdcpp", "Config"),
+        volume(sharedDataPath("downloads", "airdcpp"), "/Downloads", "Downloads"),
+        volume(sharedDataPath("share", "airdcpp"), "/Share", "Shared library"),
+      ],
+      env: [],
+    },
+  ),
+  createApp({
+    id: "immich",
+    name: "Immich",
+    description: "Gestor de fotos y vídeos autoalojado con copias automáticas y búsqueda moderna.",
+    icon: "Image",
+    image: "ghcr.io/immich-app/immich-server:release",
+    category: "Media",
+    source: "local",
+    developer: "Immich",
+    defaultConfig: {
+      ports: [port("2283", "2283", "Web UI")],
+      volumes: [volume(appDataPath("immich", "upload"), "/usr/src/app/upload", "Uploads")],
+      env: [
+        envVar("TZ", DEFAULT_TZ, "Timezone"),
+        envVar("DB_HOSTNAME", "", "PostgreSQL host"),
+        envVar("DB_USERNAME", "", "PostgreSQL user"),
+        envVar("DB_PASSWORD", "", "PostgreSQL password"),
+        envVar("DB_DATABASE_NAME", "immich", "Database name"),
+        envVar("REDIS_HOSTNAME", "", "Redis host"),
+      ],
+    },
+  }),
+  withUserMapping(
+    "sonarr",
+    "linuxserver/sonarr:latest",
+    "Sonarr",
+    "Gestión automática de series, indexadores y descargas con integración torrent y Usenet.",
+    "Download",
+    "Tv",
+    "LinuxServer.io",
+    {
+      ports: [port("8989", "8989", "Web UI")],
+      volumes: [
+        volume(appDataPath("sonarr", "config"), "/config", "Config"),
+        volume(sharedDataPath("media", "tv"), "/tv", "TV library"),
+        volume(sharedDataPath("downloads"), "/downloads", "Downloads"),
+      ],
+      env: [],
+    },
+  ),
+  withUserMapping(
+    "radarr",
+    "linuxserver/radarr:latest",
+    "Radarr",
+    "Gestor automático de películas con monitorización de calidad y descargas.",
+    "Download",
+    "Film",
+    "LinuxServer.io",
+    {
+      ports: [port("7878", "7878", "Web UI")],
+      volumes: [
+        volume(appDataPath("radarr", "config"), "/config", "Config"),
+        volume(sharedDataPath("media", "movies"), "/movies", "Movies"),
+        volume(sharedDataPath("downloads"), "/downloads", "Downloads"),
+      ],
+      env: [],
+    },
+  ),
+  withUserMapping(
+    "prowlarr",
+    "linuxserver/prowlarr:latest",
+    "Prowlarr",
+    "Proxy e indexador central para Sonarr, Radarr y el resto del stack multimedia.",
+    "Download",
+    "Search",
+    "LinuxServer.io",
+    {
+      ports: [port("9696", "9696", "Web UI")],
+      volumes: [volume(appDataPath("prowlarr", "config"), "/config", "Config")],
+      env: [],
+    },
+  ),
+  withUserMapping(
+    "overseerr",
+    "linuxserver/overseerr:latest",
+    "Overseerr",
+    "Portal de solicitudes para bibliotecas Plex/Jellyfin con gestión de peticiones.",
+    "Media",
+    "Globe",
+    "LinuxServer.io",
+    {
+      ports: [port("5055", "5055", "Web UI")],
+      volumes: [volume(appDataPath("overseerr", "config"), "/config", "Config")],
+      env: [],
+    },
+  ),
+  createApp({
+    id: "nextcloud",
+    name: "Nextcloud",
+    description: "Nube autoalojada para archivos, colaboración y sincronización entre dispositivos.",
+    icon: "Cloud",
+    image: "nextcloud:latest",
+    category: "Storage",
+    source: "local",
+    developer: "Nextcloud",
+    defaultConfig: {
+      ports: [port("8083", "80", "Web UI")],
+      volumes: [
+        volume(appDataPath("nextcloud", "html"), "/var/www/html", "App data"),
+        volume(sharedDataPath("cloud"), "/var/www/html/data", "User data"),
+      ],
+      env: [
+        envVar("TZ", DEFAULT_TZ, "Timezone"),
+        envVar("NEXTCLOUD_TRUSTED_DOMAINS", "", "Trusted domains"),
+      ],
+    },
+  }),
+  createApp({
+    id: "gitea",
+    name: "Gitea",
+    description: "Servicio Git autoalojado ligero con interfaz tipo GitHub y soporte SSH.",
+    icon: "GitBranch",
+    image: "gitea/gitea:latest",
+    category: "Development",
+    source: "local",
+    developer: "Gitea",
+    defaultConfig: {
+      ports: [
+        port("3001", "3000", "Web UI"),
+        port("2222", "22", "SSH"),
+      ],
+      volumes: [volume(appDataPath("gitea", "data"), "/data", "Data")],
+      env: [envVar("TZ", DEFAULT_TZ, "Timezone")],
+    },
+  }),
+  createApp({
     id: "nginx-proxy-manager",
     name: "Nginx Proxy Manager",
-    description: "Expose your services easily with SSL certificates and a friendly UI.",
+    description: "Proxy inverso con certificados SSL y panel amigable para exponer servicios.",
     icon: "ShieldCheck",
     image: "jc21/nginx-proxy-manager:latest",
     category: "Networking",
     source: "local",
     developer: "Nginx Proxy Manager",
-    ports: [
-      { host: "81", container: "81", label: "Admin UI" },
-      { host: "80", container: "80", label: "HTTP" },
-      { host: "443", container: "443", label: "HTTPS" },
-    ],
-    volumes: [
-      { host: "/opt/homevault/nginx-proxy-manager/data", container: "/data", label: "Data" },
-      { host: "/opt/homevault/nginx-proxy-manager/letsencrypt", container: "/etc/letsencrypt", label: "Let's Encrypt" },
-    ],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
+    defaultConfig: {
+      ports: [
+        port("81", "81", "Admin UI"),
+        port("80", "80", "HTTP"),
+        port("443", "443", "HTTPS"),
+      ],
+      volumes: [
+        volume(appDataPath("nginx-proxy-manager", "data"), "/data", "Data"),
+        volume(appDataPath("nginx-proxy-manager", "letsencrypt"), "/etc/letsencrypt", "Let's Encrypt"),
+      ],
+      env: [envVar("TZ", DEFAULT_TZ, "Timezone")],
+    },
+  }),
+  createApp({
     id: "vaultwarden",
     name: "Vaultwarden",
-    description: "Lightweight Bitwarden-compatible password manager server.",
+    description: "Servidor compatible con Bitwarden, ligero y apto para NAS doméstico.",
     icon: "Lock",
     image: "vaultwarden/server:latest",
     category: "Security",
     source: "local",
     developer: "Vaultwarden",
-    ports: [{ host: "8222", container: "80", label: "Web UI" }],
-    volumes: [{ host: "/opt/homevault/vaultwarden/data", container: "/data", label: "Data" }],
-    env: [
-      { key: "TZ", value: "Europe/Madrid", label: "Timezone" },
-      { key: "SIGNUPS_ALLOWED", value: "false", label: "Allow signups" },
-    ],
-  },
-  {
+    defaultConfig: {
+      ports: [port("8222", "80", "Web UI")],
+      volumes: [volume(appDataPath("vaultwarden", "data"), "/data", "Data")],
+      env: [
+        envVar("TZ", DEFAULT_TZ, "Timezone"),
+        envVar("SIGNUPS_ALLOWED", "false", "Permitir registro"),
+      ],
+    },
+  }),
+  createApp({
     id: "portainer",
     name: "Portainer",
-    description: "Universal container management GUI to manage Docker from a browser.",
+    description: "Panel de gestión Docker para ver, desplegar y administrar contenedores.",
     icon: "Boxes",
     image: "portainer/portainer-ce:latest",
     category: "Monitoring",
     source: "local",
     developer: "Portainer",
-    ports: [{ host: "9000", container: "9000", label: "Web UI" }],
-    volumes: [
-      { host: "/var/run/docker.sock", container: "/var/run/docker.sock", label: "Docker socket" },
-      { host: "/opt/homevault/portainer/data", container: "/data", label: "Data" },
-    ],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
+    defaultConfig: {
+      ports: [port("9000", "9000", "Web UI")],
+      volumes: [
+        volume("/var/run/docker.sock", "/var/run/docker.sock", "Docker socket"),
+        volume(appDataPath("portainer", "data"), "/data", "Data"),
+      ],
+      env: [envVar("TZ", DEFAULT_TZ, "Timezone")],
+    },
+  }),
+  createApp({
     id: "grafana",
     name: "Grafana",
-    description: "Beautiful dashboards for metrics, logs and traces.",
+    description: "Dashboards para métricas, logs y telemetría del sistema o servicios externos.",
     icon: "BarChart3",
     image: "grafana/grafana:latest",
     category: "Monitoring",
     source: "local",
     developer: "Grafana Labs",
-    ports: [{ host: "3000", container: "3000", label: "Web UI" }],
-    volumes: [{ host: "/opt/homevault/grafana/data", container: "/var/lib/grafana", label: "Data" }],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
+    defaultConfig: {
+      ports: [port("3002", "3000", "Web UI")],
+      volumes: [volume(appDataPath("grafana", "data"), "/var/lib/grafana", "Data")],
+      env: [envVar("TZ", DEFAULT_TZ, "Timezone")],
+    },
+  }),
+  createApp({
     id: "influxdb",
     name: "InfluxDB",
-    description: "Time series database designed for metrics, events and real-time analytics.",
+    description: "Base de datos de series temporales para métricas, sensores y monitorización.",
     icon: "Database",
     image: "influxdb:2",
     category: "Monitoring",
     source: "local",
     developer: "InfluxData",
-    ports: [{ host: "8086", container: "8086", label: "API / UI" }],
-    volumes: [
-      { host: "/opt/homevault/influxdb/data", container: "/var/lib/influxdb2", label: "Data" },
-      { host: "/opt/homevault/influxdb/config", container: "/etc/influxdb2", label: "Config" },
-    ],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
+    defaultConfig: {
+      ports: [port("8086", "8086", "API / UI")],
+      volumes: [
+        volume(appDataPath("influxdb", "data"), "/var/lib/influxdb2", "Data"),
+        volume(appDataPath("influxdb", "config"), "/etc/influxdb2", "Config"),
+      ],
+      env: [envVar("TZ", DEFAULT_TZ, "Timezone")],
+    },
+  }),
+  createApp({
     id: "home-assistant",
     name: "Home Assistant",
-    description: "Open source home automation platform that puts local control and privacy first.",
+    description: "Plataforma domótica con control local, integraciones y automatizaciones.",
     icon: "Home",
     image: "ghcr.io/home-assistant/home-assistant:stable",
     category: "Automation",
     source: "local",
     developer: "Home Assistant",
-    ports: [{ host: "8123", container: "8123", label: "Web UI" }],
-    volumes: [{ host: "/opt/homevault/home-assistant/config", container: "/config", label: "Config" }],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-    networkMode: "host",
-  },
-  {
+    defaultConfig: {
+      ports: [port("8123", "8123", "Web UI")],
+      volumes: [volume(appDataPath("home-assistant", "config"), "/config", "Config")],
+      env: [envVar("TZ", DEFAULT_TZ, "Timezone")],
+      networkMode: "host",
+    },
+  }),
+  createApp({
     id: "node-red",
     name: "Node-RED",
-    description: "Low-code programming for event-driven applications and IoT automation.",
+    description: "Editor visual low-code para automatización, IoT y flujos de integración.",
     icon: "Workflow",
     image: "nodered/node-red:latest",
     category: "Automation",
     source: "local",
     developer: "OpenJS Foundation",
-    ports: [{ host: "1880", container: "1880", label: "Web UI" }],
-    volumes: [{ host: "/opt/homevault/node-red/data", container: "/data", label: "Flows" }],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
-    id: "lidarr",
-    name: "Lidarr",
-    description: "Music collection manager and downloader for complete media stacks.",
-    icon: "Music",
-    image: "lscr.io/linuxserver/lidarr:latest",
-    category: "Download",
-    source: "local",
-    developer: "LinuxServer.io",
-    ports: [{ host: "8686", container: "8686", label: "Web UI" }],
-    volumes: [
-      { host: "/opt/homevault/lidarr/config", container: "/config", label: "Config" },
-      { host: "/mnt/storage/music", container: "/music", label: "Music library" },
-      { host: "/mnt/storage/downloads", container: "/downloads", label: "Downloads" },
-    ],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
-    id: "bazarr",
-    name: "Bazarr",
-    description: "Subtitle management for Sonarr and Radarr libraries.",
-    icon: "Captions",
-    image: "lscr.io/linuxserver/bazarr:latest",
-    category: "Media",
-    source: "local",
-    developer: "LinuxServer.io",
-    ports: [{ host: "6767", container: "6767", label: "Web UI" }],
-    volumes: [
-      { host: "/opt/homevault/bazarr/config", container: "/config", label: "Config" },
-      { host: "/mnt/storage/movies", container: "/movies", label: "Movies" },
-      { host: "/mnt/storage/tv", container: "/tv", label: "TV Shows" },
-    ],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
-    id: "syncthing",
-    name: "Syncthing",
-    description: "Peer-to-peer folder synchronization without a central server.",
-    icon: "RefreshCw",
-    image: "lscr.io/linuxserver/syncthing:latest",
-    category: "Storage",
-    source: "local",
-    developer: "LinuxServer.io",
-    ports: [
-      { host: "8384", container: "8384", label: "Web UI" },
-      { host: "22000", container: "22000", label: "Sync TCP" },
-      { host: "22000", container: "22000", protocol: "udp", label: "Sync UDP" },
-      { host: "21027", container: "21027", protocol: "udp", label: "Discovery" },
-    ],
-    volumes: [
-      { host: "/opt/homevault/syncthing/config", container: "/config", label: "Config" },
-      { host: "/mnt/storage", container: "/data", label: "Data" },
-    ],
-    env: [{ key: "TZ", value: "Europe/Madrid", label: "Timezone" }],
-  },
-  {
+    defaultConfig: {
+      ports: [port("1880", "1880", "Web UI")],
+      volumes: [volume(appDataPath("node-red", "data"), "/data", "Flows")],
+      env: [envVar("TZ", DEFAULT_TZ, "Timezone")],
+    },
+  }),
+  withUserMapping(
+    "lidarr",
+    "linuxserver/lidarr:latest",
+    "Lidarr",
+    "Gestor automático de música y álbumes para completar el stack multimedia.",
+    "Download",
+    "Music",
+    "LinuxServer.io",
+    {
+      ports: [port("8686", "8686", "Web UI")],
+      volumes: [
+        volume(appDataPath("lidarr", "config"), "/config", "Config"),
+        volume(sharedDataPath("media", "music"), "/music", "Music library"),
+        volume(sharedDataPath("downloads"), "/downloads", "Downloads"),
+      ],
+      env: [],
+    },
+  ),
+  withUserMapping(
+    "bazarr",
+    "linuxserver/bazarr:latest",
+    "Bazarr",
+    "Gestión de subtítulos automática para bibliotecas de series y películas.",
+    "Media",
+    "Captions",
+    "LinuxServer.io",
+    {
+      ports: [port("6767", "6767", "Web UI")],
+      volumes: [
+        volume(appDataPath("bazarr", "config"), "/config", "Config"),
+        volume(sharedDataPath("media", "movies"), "/movies", "Movies"),
+        volume(sharedDataPath("media", "tv"), "/tv", "TV Shows"),
+      ],
+      env: [],
+    },
+  ),
+  withUserMapping(
+    "syncthing",
+    "linuxserver/syncthing:latest",
+    "Syncthing",
+    "Sincronización P2P de carpetas entre dispositivos sin nube central.",
+    "Storage",
+    "RefreshCw",
+    "LinuxServer.io",
+    {
+      ports: [
+        port("8384", "8384", "Web UI"),
+        port("22000", "22000", "Sync TCP"),
+        port("22000", "22000", "Sync UDP", "udp"),
+        port("21027", "21027", "Discovery", "udp"),
+      ],
+      volumes: [
+        volume(appDataPath("syncthing", "config"), "/config", "Config"),
+        volume(sharedDataPath("sync"), "/data", "Data"),
+      ],
+      env: [],
+    },
+  ),
+  createApp({
     id: "paperless-ngx",
     name: "Paperless-ngx",
-    description: "Document management system for scanning, indexing and searching paperwork.",
+    description: "Gestor documental para escanear, indexar y buscar facturas y documentos.",
     icon: "FileText",
     image: "ghcr.io/paperless-ngx/paperless-ngx:latest",
     category: "Productivity",
     source: "local",
     developer: "Paperless-ngx",
-    ports: [{ host: "8000", container: "8000", label: "Web UI" }],
-    volumes: [
-      { host: "/opt/homevault/paperless/data", container: "/usr/src/paperless/data", label: "Data" },
-      { host: "/opt/homevault/paperless/media", container: "/usr/src/paperless/media", label: "Media" },
-      { host: "/opt/homevault/paperless/export", container: "/usr/src/paperless/export", label: "Export" },
-      { host: "/opt/homevault/paperless/consume", container: "/usr/src/paperless/consume", label: "Consume" },
-    ],
-    env: [
-      { key: "TZ", value: "Europe/Madrid", label: "Timezone" },
-      { key: "PAPERLESS_URL", value: "http://localhost:8000", label: "Base URL" },
-    ],
-  },
+    defaultConfig: {
+      ports: [port("8000", "8000", "Web UI")],
+      volumes: [
+        volume(appDataPath("paperless-ngx", "data"), "/usr/src/paperless/data", "Data"),
+        volume(appDataPath("paperless-ngx", "media"), "/usr/src/paperless/media", "Media"),
+        volume(appDataPath("paperless-ngx", "export"), "/usr/src/paperless/export", "Export"),
+        volume(appDataPath("paperless-ngx", "consume"), "/usr/src/paperless/consume", "Consume"),
+      ],
+      env: [
+        envVar("TZ", DEFAULT_TZ, "Timezone"),
+        envVar("PAPERLESS_URL", "http://localhost:8000", "Base URL"),
+      ],
+    },
+  }),
 ];

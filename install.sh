@@ -24,6 +24,7 @@ INSTALL_DIR="/opt/homevault"
 FRONTEND_DIR="$INSTALL_DIR/frontend"
 FRONTEND_DIST="$FRONTEND_DIR/dist"
 DATA_DIR="$INSTALL_DIR/data"
+REMOTE_MOUNT_DIR="/opt/homevault/remote"
 DB_FILE="$DATA_DIR/homevault.db"
 BACKEND_PORT=3000
 SERVICE_NAME="homevault"
@@ -47,6 +48,20 @@ log_warn() {
 
 log_error() {
   echo -e "${RED}❌ $1${NC}"
+}
+
+print_success_banner() {
+  local ip_address="$1"
+  echo ""
+  echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}${BOLD}║                    🚀 HOMEVAULT INSTALADO CON ÉXITO                 ║${NC}"
+  echo -e "${GREEN}${BOLD}╠══════════════════════════════════════════════════════════════════════╣${NC}"
+  printf "${GREEN}${BOLD}║  Panel de control: %-48s ║${NC}\n" "http://${ip_address}:3000"
+  printf "${BLUE}${BOLD}║  Acceso por Nginx: %-49s ║${NC}\n" "http://${ip_address}"
+  printf "${CYAN}${BOLD}║  Datos persistentes: %-45s ║${NC}\n" "${DATA_DIR}"
+  printf "${CYAN}${BOLD}║  Unidades remotas: %-46s ║${NC}\n" "${REMOTE_MOUNT_DIR}"
+  echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════════════════╝${NC}"
+  echo ""
 }
 
 detect_local_ip() {
@@ -92,7 +107,7 @@ fi
 
 log_step "📦 [1/7] Actualizando sistema e instalando dependencias base..."
 apt-get update -y
-apt-get install -y build-essential curl git rsync util-linux python3-minimal nginx mergerfs snapraid smartmontools wireguard htop ufw --no-install-recommends || true
+apt-get install -y build-essential curl git rsync util-linux python3-minimal nginx mergerfs snapraid smartmontools wireguard htop ufw rclone fuse3 --no-install-recommends || true
 
 if ! command -v docker >/dev/null 2>&1; then
   log_step "🐳 [2/7] Instalando Docker Engine..."
@@ -137,6 +152,8 @@ fi
 
 # AHORA creamos las carpetas de datos (después de clonar)
 mkdir -p "$DATA_DIR"
+mkdir -p "$REMOTE_MOUNT_DIR"
+mkdir -p "$DATA_DIR/media" "$DATA_DIR/downloads" "$DATA_DIR/downloads/watch" "$DATA_DIR/share" "$DATA_DIR/cloud" "$DATA_DIR/sync"
 cd "$INSTALL_DIR"
 touch "$DB_FILE"
 
@@ -287,9 +304,6 @@ systemctl enable nginx
 systemctl restart nginx
 
 LOCAL_IP="$(detect_local_ip)"
-echo ""
-echo -e "${GREEN}${BOLD}🎉 HomeVault ha sido instalado correctamente.${NC}"
-echo -e "${GREEN}${BOLD}🚀 HomeVault está listo. Accede en: http://${LOCAL_IP}:3000${NC}"
-echo -e "${BLUE}🌍 Acceso recomendado por Nginx: ${BOLD}http://${LOCAL_IP}${NC}"
+print_success_banner "$LOCAL_IP"
 echo -e "${CYAN}🗄️  Base de datos SQLite: ${BOLD}${DB_FILE}${NC}"
 echo -e "${CYAN}📜 Logs del backend: ${BOLD}journalctl -u ${SERVICE_NAME} -f${NC}"

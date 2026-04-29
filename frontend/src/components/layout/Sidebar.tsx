@@ -36,6 +36,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
 
     { name: 'Terminal', icon: Terminal, path: '/terminal' },
     { name: 'Red', icon: Globe, path: '/network' },
+    { name: 'Unidades de Red', icon: HardDrive, path: '/cloud' },
     { name: 'Acceso Remoto', icon: ShieldCheck, path: '/remote' },
     { name: 'Energía', icon: Zap, path: '/power' },
     { name: 'Seguridad', icon: Shield, path: '/security' },

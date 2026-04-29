@@ -9,6 +9,7 @@ import { getContainers } from "./docker.service.js";
 import { NotificationService } from "./notification.service.js";
 import {
   appInventory,
+  type AppDefaultConfig,
   type AppEnvVar,
   type AppInventoryItem,
   type AppPortMapping,
@@ -91,6 +92,29 @@ function sanitizeAppInput(input: Partial<AppInventoryItem>, source: "local" | "c
     throw new Error("La imagen Docker es obligatoria.");
   }
 
+  const defaultConfig: AppDefaultConfig = {
+    ports: sanitizePorts(input.defaultConfig?.ports ?? input.ports),
+    volumes: sanitizeVolumes(input.defaultConfig?.volumes ?? input.volumes),
+    env: sanitizeEnv(input.defaultConfig?.env ?? input.env),
+  };
+
+  const configNetworkMode = input.defaultConfig?.networkMode?.trim();
+  if (configNetworkMode) {
+    defaultConfig.networkMode = configNetworkMode;
+  }
+
+  const configPrivileged = input.defaultConfig?.privileged ?? input.privileged;
+  if (typeof configPrivileged === "boolean") {
+    defaultConfig.privileged = configPrivileged;
+  }
+
+  const configCapAdd = ensureArray(input.defaultConfig?.capAdd ?? input.capAdd)
+    .map((cap) => String(cap).trim())
+    .filter(Boolean);
+  if (configCapAdd.length > 0) {
+    defaultConfig.capAdd = configCapAdd;
+  }
+
   const app: AppInventoryItem = {
     id,
     name,
@@ -99,19 +123,20 @@ function sanitizeAppInput(input: Partial<AppInventoryItem>, source: "local" | "c
     image,
     category: String(input.category ?? "General").trim() || "General",
     source,
-    ports: sanitizePorts(input.ports),
-    volumes: sanitizeVolumes(input.volumes),
-    env: sanitizeEnv(input.env),
-    privileged: Boolean(input.privileged),
-    capAdd: ensureArray(input.capAdd).map((cap) => String(cap).trim()).filter(Boolean),
+    defaultConfig,
+    ports: defaultConfig.ports,
+    volumes: defaultConfig.volumes,
+    env: defaultConfig.env,
+    privileged: Boolean(configPrivileged),
+    capAdd: configCapAdd,
   };
 
   if (typeof input.developer === "string" && input.developer.trim()) {
     app.developer = input.developer.trim();
   }
 
-  if (typeof input.networkMode === "string" && input.networkMode.trim()) {
-    app.networkMode = input.networkMode.trim();
+  if (configNetworkMode) {
+    app.networkMode = configNetworkMode;
   }
 
   return app;
@@ -179,32 +204,47 @@ async function checkArchitectureCompatibility(image: string, appId: string): Pro
 }
 
 function mergeInstallConfig(app: AppInventoryItem, payload?: InstallAppPayload): AppInventoryItem {
+  const nextPorts = payload?.ports ? sanitizePorts(payload.ports) : app.defaultConfig.ports;
+  const nextVolumes = payload?.volumes ? sanitizeVolumes(payload.volumes) : app.defaultConfig.volumes;
+  const nextEnv = payload?.env ? sanitizeEnv(payload.env) : app.defaultConfig.env;
   const nextApp: AppInventoryItem = {
     ...app,
-    ports: payload?.ports ? sanitizePorts(payload.ports) : app.ports,
-    volumes: payload?.volumes ? sanitizeVolumes(payload.volumes) : app.volumes,
-    env: payload?.env ? sanitizeEnv(payload.env) : app.env,
+    ports: nextPorts,
+    volumes: nextVolumes,
+    env: nextEnv,
+    defaultConfig: {
+      ...app.defaultConfig,
+      ports: nextPorts,
+      volumes: nextVolumes,
+      env: nextEnv,
+    },
   };
 
   const nextPrivileged = payload?.privileged ?? app.privileged;
   if (typeof nextPrivileged === "boolean") {
     nextApp.privileged = nextPrivileged;
+    nextApp.defaultConfig.privileged = nextPrivileged;
   } else {
     delete nextApp.privileged;
+    delete nextApp.defaultConfig.privileged;
   }
 
   const nextCapAdd = payload?.capAdd?.length ? payload.capAdd : app.capAdd;
   if (nextCapAdd && nextCapAdd.length > 0) {
     nextApp.capAdd = nextCapAdd;
+    nextApp.defaultConfig.capAdd = nextCapAdd;
   } else {
     delete nextApp.capAdd;
+    delete nextApp.defaultConfig.capAdd;
   }
 
   const nextNetworkMode = payload?.networkMode?.trim();
   if (nextNetworkMode) {
     nextApp.networkMode = nextNetworkMode;
+    nextApp.defaultConfig.networkMode = nextNetworkMode;
   } else if (!nextNetworkMode && !app.networkMode) {
     delete nextApp.networkMode;
+    delete nextApp.defaultConfig.networkMode;
   }
 
   return nextApp;

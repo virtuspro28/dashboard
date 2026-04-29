@@ -1,21 +1,44 @@
-import { useState, useEffect } from 'react';
-import { 
-  Cloud, 
-  HardDrive, 
-  Plus, 
-  Loader2, 
-  Database,
+import { useEffect, useMemo, useState } from "react";
+import {
+  Cloud,
+  HardDrive,
+  Plus,
+  Loader2,
   Globe,
   Info,
-  Trash2
-} from 'lucide-react';
-import { motion } from 'framer-motion';
+  Trash2,
+  X,
+  Pencil,
+  PlugZap,
+} from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { getErrorMessage } from "../lib/errors";
+
+type RemoteProvider = "webdav" | "smb" | "ftp" | "sftp" | "drive" | "onedrive";
+
+interface ProviderField {
+  key: string;
+  label: string;
+  type: "text" | "password" | "number" | "textarea";
+  placeholder?: string;
+  required?: boolean;
+  help?: string;
+}
+
+interface ProviderDefinition {
+  id: RemoteProvider;
+  label: string;
+  description: string;
+  fields: ProviderField[];
+}
 
 interface CloudRemote {
   name: string;
-  type: string;
+  provider: RemoteProvider;
   isMounted: boolean;
-  mountPath?: string;
+  mountPath: string;
+  remotePath?: string;
+  summary: string;
   usage?: {
     total: number;
     used: number;
@@ -23,165 +46,487 @@ interface CloudRemote {
   };
 }
 
+interface RemoteProfile {
+  name: string;
+  provider: RemoteProvider;
+  remotePath?: string;
+  summary: string;
+  host?: string;
+  port?: string;
+  username?: string;
+  password?: string;
+  vendor?: string;
+  url?: string;
+  clientId?: string;
+  clientSecret?: string;
+  token?: string;
+  manualOptions?: Record<string, string>;
+}
+
+const EMPTY_FORM: RemoteProfile = {
+  name: "",
+  provider: "webdav",
+  summary: "",
+  host: "",
+  port: "",
+  username: "",
+  password: "",
+  vendor: "",
+  url: "",
+  clientId: "",
+  clientSecret: "",
+  token: "",
+  remotePath: "",
+  manualOptions: {},
+};
+
+function formatBytes(bytes: number) {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+function buildManualOptionsJson(input: Record<string, string> | undefined): string {
+  return input && Object.keys(input).length > 0 ? JSON.stringify(input, null, 2) : "";
+}
+
 export default function CloudManager() {
+  const [providers, setProviders] = useState<ProviderDefinition[]>([]);
   const [remotes, setRemotes] = useState<CloudRemote[]>([]);
+  const [profiles, setProfiles] = useState<RemoteProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
+  const [form, setForm] = useState<RemoteProfile>(EMPTY_FORM);
+  const [manualOptionsJson, setManualOptionsJson] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchRemotes();
-  }, []);
+  const activeProvider = useMemo(
+    () => providers.find((provider) => provider.id === form.provider),
+    [form.provider, providers],
+  );
 
-  const fetchRemotes = async () => {
+  const fetchData = async () => {
     try {
-      const res = await fetch('/api/cloud/remotes');
-      const data = await res.json();
-      if (data.success) {
-        setRemotes(data.data);
+      const [providersRes, remotesRes, profilesRes] = await Promise.all([
+        fetch("/api/cloud/providers", { credentials: "include" }),
+        fetch("/api/cloud/remotes", { credentials: "include" }),
+        fetch("/api/cloud/profiles", { credentials: "include" }),
+      ]);
+
+      const [providersData, remotesData, profilesData] = await Promise.all([
+        providersRes.json(),
+        remotesRes.json(),
+        profilesRes.json(),
+      ]);
+
+      if (providersData.success) {
+        setProviders(providersData.data);
       }
-    } catch (err) {
-      console.error('Error fetching remotes:', err);
+      if (remotesData.success) {
+        setRemotes(remotesData.data);
+      }
+      if (profilesData.success) {
+        setProfiles(profilesData.data);
+      }
+
+      setError(null);
+    } catch (fetchError) {
+      setError(getErrorMessage(fetchError, "No se pudieron cargar las unidades de red."));
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    let disposed = false;
+    const load = async () => {
+      await fetchData();
+      if (disposed) {
+        return;
+      }
+    };
+
+    void load();
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  const openCreate = () => {
+    setEditorMode("create");
+    setForm(EMPTY_FORM);
+    setManualOptionsJson("");
+    setEditorOpen(true);
+  };
+
+  const openEdit = (profile: RemoteProfile) => {
+    setEditorMode("edit");
+    setForm({
+      ...EMPTY_FORM,
+      ...profile,
+      password: "",
+      clientSecret: profile.clientSecret ?? "",
+      token: profile.token ?? "",
+    });
+    setManualOptionsJson(buildManualOptionsJson(profile.manualOptions));
+    setEditorOpen(true);
+  };
+
   const handleMount = async (remote: CloudRemote) => {
     setActionLoading(remote.name);
     try {
-      const method = remote.isMounted ? 'DELETE' : 'POST';
-      const res = await fetch(`/api/cloud/mount/${remote.name}`, { method });
+      const method = remote.isMounted ? "DELETE" : "POST";
+      const res = await fetch(`/api/cloud/mount/${remote.name}`, { method, credentials: "include" });
       const data = await res.json();
-      if (data.success) {
-        fetchRemotes();
-      } else {
-        alert('Error: ' + data.error);
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "No se pudo cambiar el estado del montaje");
       }
-    } catch (err) {
-      alert('Error de conexión');
+      setFeedback(remote.isMounted ? `Unidad ${remote.name} desmontada` : `Unidad ${remote.name} montada`);
+      await fetchData();
+    } catch (mountError) {
+      setError(getErrorMessage(mountError, "No se pudo montar la unidad"));
     } finally {
       setActionLoading(null);
     }
   };
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const handleDelete = async (name: string) => {
+    if (!window.confirm(`¿Eliminar la unidad ${name}?`)) {
+      return;
+    }
+
+    setActionLoading(name);
+    try {
+      const res = await fetch(`/api/cloud/profiles/${name}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "No se pudo eliminar la unidad");
+      }
+      setFeedback(`Unidad ${name} eliminada`);
+      await fetchData();
+    } catch (deleteError) {
+      setError(getErrorMessage(deleteError, "No se pudo eliminar la unidad"));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setActionLoading(form.name || "save");
+
+    try {
+      let manualOptions: Record<string, string> | undefined;
+      if (manualOptionsJson.trim()) {
+        manualOptions = JSON.parse(manualOptionsJson) as Record<string, string>;
+      }
+
+      const payload = {
+        ...form,
+        manualOptions,
+      };
+
+      const endpoint = editorMode === "edit" ? `/api/cloud/profiles/${form.name}` : "/api/cloud/profiles";
+      const method = editorMode === "edit" ? "PUT" : "POST";
+
+      const res = await fetch(endpoint, {
+        method,
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "No se pudo guardar la unidad");
+      }
+
+      setFeedback(editorMode === "edit" ? "Unidad actualizada" : "Unidad creada");
+      setEditorOpen(false);
+      await fetchData();
+    } catch (saveError) {
+      setError(getErrorMessage(saveError, "No se pudo guardar la unidad"));
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-8 pb-12">
+      <div className="flex flex-col gap-6 rounded-[2.5rem] border border-white/5 bg-slate-900/40 p-8 backdrop-blur-md xl:flex-row xl:items-center xl:justify-between">
         <div className="flex items-center space-x-4">
-          <div className="p-4 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-3xl shadow-xl shadow-indigo-900/20">
-            <Cloud className="w-8 h-8 text-white" />
+          <div className="rounded-3xl bg-blue-500/10 p-4">
+            <Cloud className="h-8 w-8 text-blue-400" />
           </div>
           <div>
-            <h1 className="text-3xl font-black text-white tracking-tight">Cloud Manager</h1>
-            <p className="text-slate-400">Gestiona y monta tus nubes externas con RClone.</p>
+            <h1 className="text-2xl font-black text-white">Unidades de Red</h1>
+            <p className="mt-1 text-sm font-bold uppercase tracking-widest text-slate-500">
+              WebDAV, SMB, FTP, SFTP, Google Drive y OneDrive vía Rclone
+            </p>
           </div>
         </div>
-        
-        <button className="flex items-center space-x-2 px-6 py-3 bg-white/5 hover:bg-white/10 text-white font-bold rounded-full border border-white/10 transition-all active:scale-95">
-          <Plus className="w-5 h-5 text-indigo-400" />
-          <span>Añadir Cuenta Nube</span>
+
+        <button
+          onClick={openCreate}
+          className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 font-black text-white transition-all hover:bg-blue-500"
+        >
+          <Plus className="h-4 w-4" />
+          Nueva unidad
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      {error && (
+        <div className="rounded-[2rem] border border-red-500/20 bg-red-500/10 px-6 py-4 text-sm text-red-200">
+          {error}
+        </div>
+      )}
+
+      {feedback && (
+        <div className="rounded-[2rem] border border-emerald-500/20 bg-emerald-500/10 px-6 py-4 text-sm text-emerald-200">
+          {feedback}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {loading ? (
-          [1,2,3].map(i => (
-            <div key={i} className="h-64 bg-slate-900/40 rounded-[2rem] border border-white/5 animate-pulse"></div>
+          [1, 2, 3].map((index) => (
+            <div key={index} className="h-72 animate-pulse rounded-[2rem] border border-white/5 bg-slate-900/40" />
           ))
         ) : remotes.length === 0 ? (
-          <div className="col-span-full py-20 bg-slate-900/40 rounded-[2.5rem] border border-dashed border-white/10 flex flex-col items-center justify-center text-center">
-             <Globe className="w-16 h-16 text-slate-700 mb-4" />
-             <h3 className="text-xl font-bold text-slate-300">No hay cuentas configuradas</h3>
-             <p className="text-slate-500 max-w-xs mt-2 text-sm">Configura RClone desde la terminal para ver tus cuentas aquí.</p>
+          <div className="col-span-full flex flex-col items-center justify-center rounded-[2.5rem] border border-dashed border-white/10 bg-slate-900/40 py-20 text-center">
+            <Globe className="mb-4 h-16 w-16 text-slate-700" />
+            <h3 className="text-xl font-bold text-slate-300">No hay unidades configuradas</h3>
+            <p className="mt-2 max-w-md text-sm text-slate-500">
+              Crea una unidad con credenciales guardadas en HomeVault y podrás montarla o desmontarla desde aquí.
+            </p>
           </div>
-        ) : remotes.map((remote) => (
-          <motion.div 
-            key={remote.name}
-            whileHover={{ y: -5 }}
-            className="group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 overflow-hidden"
-          >
-            <div className={`absolute top-0 right-0 w-32 h-32 blur-[80px] rounded-full -mr-16 -mt-16 opacity-30 ${remote.isMounted ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div>
+        ) : (
+          remotes.map((remote) => (
+            <motion.div
+              key={remote.name}
+              whileHover={{ y: -4 }}
+              className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/40 p-8 backdrop-blur-xl"
+            >
+              <div className={`absolute right-0 top-0 -mr-16 -mt-16 h-32 w-32 rounded-full blur-[80px] opacity-30 ${remote.isMounted ? "bg-emerald-500" : "bg-blue-500"}`}></div>
 
-            <div className="flex items-start justify-between mb-8">
-              <div className="flex items-center space-x-4">
-                <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
-                  <Database className={`w-6 h-6 ${remote.isMounted ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <HardDrive className={`h-6 w-6 ${remote.isMounted ? "text-emerald-400" : "text-slate-400"}`} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase tracking-tight text-white">{remote.name}</h3>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{remote.provider}</p>
+                  </div>
+                </div>
+                <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${remote.isMounted ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border-white/10 bg-white/5 text-slate-400"}`}>
+                  {remote.isMounted ? "Montada" : "Desconectada"}
+                </span>
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-950/60 p-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Origen</p>
+                  <p className="mt-1 text-sm text-slate-300">{remote.summary}</p>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white uppercase tracking-tight">{remote.name}</h3>
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{remote.type} Provider</span>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Montaje local</p>
+                  <p className="mt-1 break-all text-sm text-blue-300">{remote.mountPath}</p>
                 </div>
+                {remote.remotePath && (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Subruta remota</p>
+                    <p className="mt-1 text-sm text-slate-300">{remote.remotePath}</p>
+                  </div>
+                )}
               </div>
-              <div className={`px-3 py-1 rounded-full text-[9px] font-bold border uppercase ${remote.isMounted ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-500/10 border-slate-500/20 text-slate-500'}`}>
-                {remote.isMounted ? 'Montado' : 'Desconectado'}
-              </div>
-            </div>
 
-            {remote.usage && (
-              <div className="space-y-4 mb-8">
-                <div className="flex justify-between items-end">
-                   <div className="flex flex-col">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase">Espacio total</span>
-                      <span className="text-lg font-black text-white">{formatBytes(remote.usage.total)}</span>
-                   </div>
-                   <span className="text-xs font-bold text-slate-400">{Math.round((remote.usage.used / remote.usage.total) * 100)}%</span>
+              {remote.usage && (
+                <div className="mt-5 rounded-2xl bg-white/5 p-4">
+                  <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-400">
+                    <span>Uso detectado</span>
+                    <span>{Math.round((remote.usage.used / remote.usage.total) * 100)}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-950">
+                    <div className="h-full rounded-full bg-blue-500" style={{ width: `${(remote.usage.used / remote.usage.total) * 100}%` }} />
+                  </div>
+                  <div className="mt-3 flex justify-between text-[11px] text-slate-400">
+                    <span>{formatBytes(remote.usage.used)} usados</span>
+                    <span>{formatBytes(remote.usage.free)} libres</span>
+                  </div>
                 </div>
-                <div className="h-2 w-full bg-black/40 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(remote.usage.used / remote.usage.total) * 100}%` }}
-                    className="h-full bg-indigo-500 rounded-full"
-                  />
-                </div>
-              </div>
-            )}
+              )}
 
-            <div className="flex gap-3">
-              <button 
-                onClick={() => handleMount(remote)}
-                disabled={actionLoading === remote.name}
-                className={`flex-1 flex items-center justify-center space-x-2 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${
-                  remote.isMounted 
-                    ? 'bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/20' 
-                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
-                }`}
-              >
-                {actionLoading === remote.name ? <Loader2 className="w-4 h-4 animate-spin" /> : remote.isMounted ? <Trash2 className="w-4 h-4" /> : <HardDrive className="w-4 h-4" />}
-                <span>{remote.isMounted ? 'Desmontar' : 'Montar en NAS'}</span>
-              </button>
-            </div>
-
-            {remote.isMounted && (
-              <div className="mt-4 flex items-center space-x-2 text-[10px] text-slate-500 font-medium">
-                <span className="uppercase font-bold">Mount:</span>
-                 <span className="bg-black/20 px-2 py-1 rounded-lg text-slate-400 truncate">{remote.mountPath}</span>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  onClick={() => void handleMount(remote)}
+                  disabled={actionLoading === remote.name}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-4 text-xs font-black uppercase tracking-widest transition-all ${remote.isMounted ? "border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/20" : "bg-blue-600 text-white hover:bg-blue-500"}`}
+                >
+                  {actionLoading === remote.name ? <Loader2 className="h-4 w-4 animate-spin" /> : remote.isMounted ? <PlugZap className="h-4 w-4" /> : <HardDrive className="h-4 w-4" />}
+                  <span>{remote.isMounted ? "Desmontar" : "Montar"}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const profile = profiles.find((item) => item.name === remote.name);
+                    if (profile) {
+                      openEdit(profile);
+                    }
+                  }}
+                  className="rounded-2xl bg-white/5 p-4 text-slate-300 hover:bg-white/10"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => void handleDelete(remote.name)}
+                  className="rounded-2xl bg-red-500/10 p-4 text-red-300 hover:bg-red-500/20"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
-            )}
-          </motion.div>
-        ))}
+            </motion.div>
+          ))
+        )}
       </div>
 
-      <div className="bg-blue-600/5 border border-blue-600/20 rounded-[2.5rem] p-8 flex items-start space-x-6">
-        <div className="p-4 bg-blue-600/20 rounded-3xl">
-          <Info className="w-8 h-8 text-blue-400" />
+      <div className="flex items-start gap-6 rounded-[2.5rem] border border-blue-600/20 bg-blue-600/5 p-8">
+        <div className="rounded-3xl bg-blue-600/20 p-4">
+          <Info className="h-8 w-8 text-blue-400" />
         </div>
         <div className="space-y-2">
-          <h4 className="text-lg font-bold text-white uppercase tracking-tight">¿Qué es Cloud Manager?</h4>
-          <p className="text-slate-400 text-sm leading-relaxed">
-            Esta sección utiliza <b>RClone</b> para sincronizar proveedores externos como Google Drive o Dropbox directamente en el pool de discos de tu NAS. 
-            Una vez montado, el contenido aparecerá como una carpeta local y podrá ser gestionado desde el Explorador de Archivos o compartido por Plex.
+          <h4 className="text-lg font-bold text-white">Cómo funciona</h4>
+          <p className="text-sm leading-relaxed text-slate-400">
+            HomeVault guarda los perfiles, genera `rclone.conf` y monta cada unidad bajo `/opt/homevault/remote/[nombre]`.
+            Para Google Drive y OneDrive el flujo usa token OAuth ya generado con Rclone, porque esos proveedores no aceptan
+            un simple usuario y contraseña.
           </p>
         </div>
       </div>
+
+      <AnimatePresence>
+        {editorOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEditorOpen(false)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+            />
+            <motion.form
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              onSubmit={handleSave}
+              className="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[2.5rem] border border-white/10 bg-slate-900 p-8 shadow-2xl"
+            >
+              <div className="mb-8 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-black text-white">
+                    {editorMode === "edit" ? "Editar unidad de red" : "Nueva unidad de red"}
+                  </h2>
+                  <p className="mt-1 text-sm font-bold uppercase tracking-widest text-slate-500">
+                    Credenciales guardadas, generación de Rclone y montaje con un clic
+                  </p>
+                </div>
+                <button type="button" onClick={() => setEditorOpen(false)} className="rounded-2xl bg-white/5 p-3 hover:bg-white/10">
+                  <X className="h-5 w-5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <input
+                  value={form.name}
+                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Nombre único"
+                  className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm"
+                  disabled={editorMode === "edit"}
+                  required
+                />
+                <select
+                  value={form.provider}
+                  onChange={(event) => setForm((current) => ({ ...current, provider: event.target.value as RemoteProvider }))}
+                  className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm"
+                >
+                  {providers.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {activeProvider && (
+                <div className="mt-8 rounded-2xl border border-white/5 bg-slate-950/50 p-5">
+                  <p className="text-sm font-black text-white">{activeProvider.label}</p>
+                  <p className="mt-2 text-sm text-slate-400">{activeProvider.description}</p>
+                </div>
+              )}
+
+              <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+                {activeProvider?.fields.map((field) => {
+                  const value = String((form as unknown as Record<string, unknown>)[field.key] ?? "");
+                  const isTextArea = field.type === "textarea";
+                  const commonProps = {
+                    placeholder: field.placeholder,
+                    required: field.required,
+                    className: "w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm",
+                  };
+
+                  return (
+                    <div key={field.key} className={isTextArea ? "md:col-span-2" : ""}>
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">{field.label}</p>
+                      {isTextArea ? (
+                        <textarea
+                          value={value}
+                          onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
+                          {...commonProps}
+                          rows={6}
+                        />
+                      ) : (
+                        <input
+                          type={field.type}
+                          value={value}
+                          onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
+                          {...commonProps}
+                        />
+                      )}
+                      {field.help && <p className="mt-2 text-xs text-slate-500">{field.help}</p>}
+                    </div>
+                  );
+                })}
+
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Opciones avanzadas JSON</p>
+                  <textarea
+                    value={manualOptionsJson}
+                    onChange={(event) => setManualOptionsJson(event.target.value)}
+                    placeholder='{"encoding":"Slash,BackSlash,Del,Ctl,RightSpace,InvalidUtf8,Dot"}'
+                    className="min-h-[160px] w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-col gap-4 md:flex-row">
+                <button type="button" onClick={() => setEditorOpen(false)} className="w-full rounded-2xl bg-slate-800 px-6 py-4 font-black text-white hover:bg-slate-700">
+                  Cancelar
+                </button>
+                <button type="submit" className="w-full rounded-2xl bg-blue-600 px-6 py-4 font-black text-white hover:bg-blue-500">
+                  {editorMode === "edit" ? "Guardar cambios" : "Crear unidad"}
+                </button>
+              </div>
+            </motion.form>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

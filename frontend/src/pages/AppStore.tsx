@@ -48,6 +48,13 @@ interface StoreApp {
   source?: 'local' | 'custom';
   developer?: string;
   isInstalled?: boolean;
+  defaultConfig?: {
+    ports: PortMapping[];
+    volumes: VolumeMapping[];
+    env: EnvVar[];
+    networkMode?: string;
+    privileged?: boolean;
+  };
   ports: PortMapping[];
   volumes: VolumeMapping[];
   env: EnvVar[];
@@ -92,6 +99,8 @@ function AppIcon({ app }: { app: StoreApp }) {
 }
 
 function toFormState(app?: StoreApp): AppFormState {
+  const preset = app?.defaultConfig ?? app;
+
   return {
     id: app?.id ?? '',
     name: app?.name ?? '',
@@ -100,11 +109,11 @@ function toFormState(app?: StoreApp): AppFormState {
     category: app?.category ?? 'General',
     developer: app?.developer ?? '',
     icon: app?.icon ?? 'Package',
-    ports: app?.ports?.length ? app.ports.map((port) => ({ ...port, protocol: port.protocol ?? 'tcp' })) : [{ ...EMPTY_PORT }],
-    volumes: app?.volumes?.length ? app.volumes.map((volume) => ({ ...volume })) : [{ ...EMPTY_VOLUME }],
-    env: app?.env?.length ? app.env.map((item) => ({ ...item })) : [{ ...EMPTY_ENV }],
-    networkMode: app?.networkMode ?? '',
-    privileged: Boolean(app?.privileged),
+    ports: preset?.ports?.length ? preset.ports.map((port) => ({ ...port, protocol: port.protocol ?? 'tcp' })) : [{ ...EMPTY_PORT }],
+    volumes: preset?.volumes?.length ? preset.volumes.map((volume) => ({ ...volume })) : [{ ...EMPTY_VOLUME }],
+    env: preset?.env?.length ? preset.env.map((item) => ({ ...item })) : [{ ...EMPTY_ENV }],
+    networkMode: preset?.networkMode ?? app?.networkMode ?? '',
+    privileged: Boolean(preset?.privileged ?? app?.privileged),
   };
 }
 
@@ -721,6 +730,18 @@ export default function AppStore() {
                     </p>
                   </div>
                 </div>
+
+                {selectedApp.defaultConfig && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setInstallForm(toFormState(selectedApp))}
+                      className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black uppercase tracking-widest text-slate-300"
+                    >
+                      Restaurar preset oficial
+                    </button>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 2xl:grid-cols-2 gap-8">
                   <div className="space-y-6">
