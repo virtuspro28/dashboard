@@ -199,8 +199,17 @@ router.get("/update/check", requireAuth, async (_req: Request, res: Response) =>
 
 router.post("/update/apply", requireAuth, async (_req: Request, res: Response) => {
   try {
-    await UpdateService.performUpdate();
-    res.json({ success: true, message: "Actualización iniciada" });
+    const result = await UpdateService.performUpdate();
+    res.status(result.success ? 200 : 500).json(result);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post("/update/system", requireAuth, async (_req: Request, res: Response) => {
+  try {
+    const result = await UpdateService.updateSystemPackages();
+    res.status(result.success ? 200 : 500).json(result);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
