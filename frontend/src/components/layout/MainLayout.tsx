@@ -21,6 +21,7 @@ export default function MainLayout() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [showNotif, setShowNotif] = useState(false);
   const [showConfirm, setShowConfirm] = useState<'reboot' | 'shutdown' | null>(null);
+  const [systemMessage, setSystemMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   const requestNotificationPermission = async () => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -84,10 +85,18 @@ export default function MainLayout() {
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || `No se pudo ejecutar ${action}`);
       }
-      alert(`${action === 'reboot' ? 'Reiniciando' : 'Apagando'} sistema...`);
       setShowConfirm(null);
+      setSystemMessage({
+        text: action === 'reboot'
+          ? 'El sistema se está reiniciando. La conexión se perderá en unos segundos...'
+          : 'El sistema se está apagando. La conexión se perderá en unos segundos...',
+        isError: false,
+      });
     } catch (error) {
-      alert(getErrorMessage(error, "Error ejecutando acción de sistema"));
+      setShowConfirm(null);
+      const msg = getErrorMessage(error, 'No se pudo ejecutar la acción de sistema');
+      setSystemMessage({ text: msg, isError: true });
+      setTimeout(() => setSystemMessage(null), 8000);
     }
   };
 
@@ -245,6 +254,42 @@ export default function MainLayout() {
                   Confirmar {showConfirm === 'reboot' ? 'Reinicio' : 'Apagado'}
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {systemMessage && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-950/95 backdrop-blur-xl">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="text-center max-w-lg"
+            >
+              <div className={`p-8 rounded-full w-28 h-28 mx-auto mb-10 flex items-center justify-center ${
+                systemMessage.isError ? 'bg-red-500/10' : 'bg-blue-500/10'
+              }`}>
+                {systemMessage.isError
+                  ? <AlertCircle className="w-14 h-14 text-red-500" />
+                  : <Power className="w-14 h-14 text-blue-500 animate-pulse" />
+                }
+              </div>
+              <h2 className="text-3xl font-black text-white uppercase tracking-tight mb-6">
+                {systemMessage.isError ? 'Error del Sistema' : 'Acción en Curso'}
+              </h2>
+              <p className="text-slate-400 text-sm font-bold uppercase tracking-widest leading-relaxed">
+                {systemMessage.text}
+              </p>
+              {systemMessage.isError && (
+                <button
+                  onClick={() => setSystemMessage(null)}
+                  className="mt-8 px-8 py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-slate-300 font-bold uppercase text-xs tracking-widest"
+                >
+                  Cerrar
+                </button>
+              )}
             </motion.div>
           </div>
         )}

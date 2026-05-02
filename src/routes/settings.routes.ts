@@ -5,6 +5,7 @@ import { NotificationService } from '../services/notification.service.js';
 
 const prisma = new PrismaClient();
 const router = Router();
+function getMsg(e: unknown): string { return e instanceof Error ? e.message : 'Error desconocido'; }
 
 /**
  * GET /api/settings/notifications
@@ -14,8 +15,8 @@ router.get('/notifications', requireAuth, async (req, res) => {
   try {
     const config = await NotificationService.getConfig();
     res.json({ success: true, data: config });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -30,8 +31,8 @@ router.patch('/notifications', requireAuth, async (req, res) => {
       data: req.body
     });
     res.json({ success: true, data: updated });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -46,8 +47,8 @@ router.post('/notifications/test', requireAuth, async (req, res) => {
       'INFO'
     );
     res.json({ success: true, message: 'Notificación de prueba enviada' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 

@@ -3,6 +3,7 @@ import { requireAuth, requireAdmin } from '../middlewares/authMiddleware.js';
 import { UserService } from '../services/user.service.js';
 
 const router = Router();
+function getMsg(e: unknown): string { return e instanceof Error ? e.message : 'Error desconocido'; }
 
 // Todas las rutas de usuarios requieren estar autenticado
 router.use(requireAuth);
@@ -15,8 +16,8 @@ router.get('/', requireAdmin, async (req, res) => {
   try {
     const users = await UserService.listUsers();
     res.json({ success: true, data: users });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -32,8 +33,8 @@ router.post('/', requireAdmin, async (req, res) => {
     }
     const user = await UserService.createUser({ username, password, role, storageQuota });
     res.status(201).json({ success: true, data: user });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(400).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -46,8 +47,8 @@ router.patch('/:id', requireAdmin, async (req, res) => {
     const { role, storageQuota } = req.body;
     const user = await UserService.updatePermissions(req.params["id"] as string, { role, storageQuota });
     res.json({ success: true, data: user });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(400).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -63,8 +64,8 @@ router.post('/:id/reset-password', requireAdmin, async (req, res) => {
     }
     await UserService.resetPassword(req.params["id"] as string, password);
     res.json({ success: true, message: 'Contraseña restablecida correctamente' });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(400).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -76,8 +77,8 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     await UserService.deleteUser(req.params["id"] as string);
     res.json({ success: true, message: 'Usuario eliminado correctamente' });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(400).json({ success: false, error: getMsg(error) });
   }
 });
 

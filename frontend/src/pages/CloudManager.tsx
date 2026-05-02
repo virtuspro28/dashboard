@@ -557,7 +557,7 @@ export default function CloudManager() {
                   value={form.name}
                   onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                   placeholder="Nombre único"
-                  className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm"
+                  className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white"
                   disabled={editorMode === "edit"}
                   required
                 />
@@ -599,7 +599,7 @@ export default function CloudManager() {
                   const commonProps = {
                     placeholder: field.placeholder,
                     required: field.required,
-                    className: "w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm",
+                    className: "w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white",
                   };
 
                   return (
@@ -631,7 +631,7 @@ export default function CloudManager() {
                     value={manualOptionsJson}
                     onChange={(event) => setManualOptionsJson(event.target.value)}
                     placeholder='{"encoding":"Slash,BackSlash,Del,Ctl,RightSpace,InvalidUtf8,Dot"}'
-                    className="min-h-[160px] w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm"
+                    className="min-h-[160px] w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white"
                   />
                 </div>
               </div>

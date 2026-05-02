@@ -4,6 +4,7 @@ import { BackupService } from '../services/backup.service.js';
 import { getDatabase } from '../database/connection.js';
 
 const router = Router();
+function getMsg(e: unknown): string { return e instanceof Error ? e.message : 'Error desconocido'; }
 const prisma = getDatabase();
 
 /**
@@ -13,8 +14,8 @@ router.get('/tasks', requireAuth, async (req, res) => {
   try {
     const tasks = await BackupService.listTasks();
     res.json({ success: true, data: tasks });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -35,8 +36,8 @@ router.post('/tasks', requireAuth, async (req, res) => {
       }
     });
     res.json({ success: true, data: task });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -49,8 +50,8 @@ router.post('/run/:id', requireAuth, async (req, res) => {
     // No esperamos el resultado para no bloquear la petición
     BackupService.executeRsyncTask(id);
     res.json({ success: true, message: 'Tarea de respaldo iniciada en segundo plano' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -61,8 +62,8 @@ router.get('/usb', requireAuth, async (req, res) => {
   try {
     const drives = await BackupService.findExternalDrives();
     res.json({ success: true, data: drives });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 

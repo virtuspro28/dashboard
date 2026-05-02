@@ -14,6 +14,10 @@ import { getSystemStats, getHardwareInfo } from "../modules/system-monitor.js";
 const execAsync = promisify(exec);
 const router = Router();
 const log = logger.child("system-routes");
+
+function getMsg(e: unknown): string {
+  return e instanceof Error ? e.message : "Error desconocido";
+}
 const prisma = new PrismaClient();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -32,24 +36,32 @@ function getPackageVersion(): string {
 router.post("/reboot", requireAuth, requireAdmin, async (_req: Request, res: Response) => {
   try {
     log.warn("Solicitud de REINICIO de sistema recibida.");
-    if (process.platform !== "win32") {
-      exec("sudo /sbin/reboot");
-    }
     res.json({ success: true, message: "Reiniciando sistema..." });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    if (process.platform !== "win32") {
+      setTimeout(() => {
+        exec("sudo /sbin/reboot", (err) => {
+          if (err) log.error(`Error ejecutando reboot: ${err.message}`);
+        });
+      }, 1500);
+    }
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
 router.post("/shutdown", requireAuth, requireAdmin, async (_req: Request, res: Response) => {
   try {
     log.warn("Solicitud de APAGADO de sistema recibida.");
-    if (process.platform !== "win32") {
-      exec("sudo /sbin/shutdown -h now");
-    }
     res.json({ success: true, message: "Apagando sistema..." });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    if (process.platform !== "win32") {
+      setTimeout(() => {
+        exec("sudo /sbin/shutdown -h now", (err) => {
+          if (err) log.error(`Error ejecutando shutdown: ${err.message}`);
+        });
+      }, 1500);
+    }
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -82,8 +94,8 @@ router.get("/processes", requireAuth, async (_req: Request, res: Response) => {
     });
 
     res.json({ success: true, data: processes });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -94,8 +106,8 @@ router.delete("/processes/:pid", requireAuth, requireAdmin, async (req: Request,
       await execAsync(`sudo kill -9 ${pid}`);
     }
     res.json({ success: true, message: `Proceso ${pid} finalizado.` });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -107,8 +119,8 @@ router.get("/notifications/history", requireAuth, async (_req: Request, res: Res
       take: 20,
     });
     res.json({ success: true, data: history });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -130,8 +142,8 @@ router.get("/events", requireAuth, async (req: Request, res: Response) => {
     });
 
     res.json({ success: true, data: events });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -142,8 +154,8 @@ router.patch("/events/read-all", requireAuth, async (_req: Request, res: Respons
       data: { isRead: true },
     });
     res.json({ success: true, message: "Todas las notificaciones marcadas como leídas" });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -151,8 +163,8 @@ router.delete("/events", requireAuth, requireAdmin, async (_req: Request, res: R
   try {
     await prisma.notificationActivity.deleteMany({});
     res.json({ success: true, message: "Historial de eventos vaciado" });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -174,8 +186,8 @@ router.get("/version", async (_req: Request, res: Response) => {
       commit: commit,
       arch: process.arch,
     });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -183,8 +195,8 @@ router.get("/summary", requireAuth, async (_req: Request, res: Response) => {
   try {
     const data = await TelemetryService.getSummary();
     res.json({ success: true, data });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -192,8 +204,8 @@ router.get("/update/check", requireAuth, async (_req: Request, res: Response) =>
   try {
     const data = await UpdateService.checkForUpdates();
     res.json({ success: true, data });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -201,8 +213,8 @@ router.get("/check-updates", requireAuth, async (_req: Request, res: Response) =
   try {
     const data = await UpdateService.checkForUpdates();
     res.json({ success: true, data });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -210,8 +222,8 @@ router.post("/update/apply", requireAuth, async (_req: Request, res: Response) =
   try {
     const result = await UpdateService.performUpdate();
     res.type("application/json").status(result.success ? 200 : 500).send(JSON.stringify(result));
-  } catch (error: any) {
-    res.type("application/json").status(500).send(JSON.stringify({ success: false, error: error.message }));
+  } catch (error: unknown) {
+    res.type("application/json").status(500).send(JSON.stringify({ success: false, error: getMsg(error) }));
   }
 });
 
@@ -219,8 +231,8 @@ router.post("/update", requireAuth, async (_req: Request, res: Response) => {
   try {
     const result = await UpdateService.performUpdate();
     res.type("application/json").status(result.success ? 200 : 500).send(JSON.stringify(result));
-  } catch (error: any) {
-    res.type("application/json").status(500).send(JSON.stringify({ success: false, error: error.message }));
+  } catch (error: unknown) {
+    res.type("application/json").status(500).send(JSON.stringify({ success: false, error: getMsg(error) }));
   }
 });
 
@@ -228,8 +240,8 @@ router.post("/update/system", requireAuth, async (_req: Request, res: Response) 
   try {
     const result = await UpdateService.updateSystemPackages();
     res.status(result.success ? 200 : 500).json(result);
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -237,8 +249,8 @@ router.get("/telemetry", requireAuth, async (_req: Request, res: Response) => {
   try {
     const data = TelemetryService.getTelemetry();
     res.json({ success: true, data });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -254,8 +266,8 @@ router.get("/logs", requireAuth, async (_req: Request, res: Response) => {
 
     const { stdout } = await execAsync("journalctl -u homevault -n 50 --no-pager");
     res.json({ success: true, data: stdout });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -276,8 +288,8 @@ router.get("/stats", async (_req: Request, res: Response) => {
         const containers = await dockerModule.getContainers();
         activeContainers = Array.isArray(containers) ? containers.filter(c => c.state === 'running').length : 0;
       }
-    } catch (e: any) {
-      log.warn(`Error leyendo contenedores para stats: ${e?.message || e}`);
+    } catch (e: unknown) {
+      log.warn(`Error leyendo contenedores para stats: ${getMsg(e)}`);
     }
 
 

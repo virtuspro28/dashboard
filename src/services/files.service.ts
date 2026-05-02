@@ -115,8 +115,8 @@ export async function listFiles(reqPath: string = ''): Promise<FileItem[]> {
       }
       return a.isDirectory ? -1 : 1;
     });
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
+  } catch (error: unknown) {
+    if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
       if (!normalizedPath) {
         await ensureStorageRootExists();
         return [];

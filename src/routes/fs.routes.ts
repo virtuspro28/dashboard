@@ -58,9 +58,10 @@ router.get("/list", async (req: Request, res: Response) => {
     const targetPath = typeof req.query['path'] === 'string' ? req.query['path'] : '/';
     const items = await listFiles(targetPath);
     res.status(200).json({ success: true, data: items, path: targetPath || '/' });
-  } catch (err: any) {
-    log.error(`Browse error: ${err.message}`);
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    log.error(`Browse error: ${message}`);
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -90,8 +91,9 @@ router.post("/upload", upload.array("files"), async (req: Request, res: Response
     }
 
     res.status(200).json({ success: true, message: "Files uploaded successfully" });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -127,8 +129,9 @@ router.post("/mkdir", async (req: Request, res: Response) => {
     const { path: folderPath, name } = req.body;
     await createDirectory(folderPath || '', name);
     res.status(201).json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -140,8 +143,9 @@ router.delete("/delete", async (req: Request, res: Response) => {
     const filePath = req.query["path"] as string;
     await deleteItem(filePath);
     res.status(200).json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -154,8 +158,9 @@ router.patch("/rename", async (req: Request, res: Response) => {
     const { oldPath, newPath } = req.body;
     await renameItem(oldPath, newPath);
     res.status(200).json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -168,8 +173,9 @@ router.get("/search", async (req: Request, res: Response) => {
     if (!query) return res.status(400).json({ success: false, error: "Query is required" });
     const results = await searchFiles(query);
     res.status(200).json({ success: true, data: results });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ success: false, error: message });
   }
 });
 

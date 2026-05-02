@@ -5,6 +5,7 @@ import { DiskService } from "../services/disk.service.js";
 import { SnapRaidService } from "../services/snapraid.service.js";
 
 const router = Router();
+function getMsg(e: unknown): string { return e instanceof Error ? e.message : 'Error desconocido'; }
 
 router.use(requireAuth);
 
@@ -14,8 +15,8 @@ router.get("/pools", async (_req, res) => {
   try {
     const pools = await SnapRaidService.listPools();
     res.json({ success: true, data: pools });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -23,8 +24,8 @@ router.get("/pool/status", async (_req, res) => {
   try {
     const status = await SnapRaidService.getStatus();
     res.json({ success: true, data: status });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -32,8 +33,8 @@ router.post("/pool/sync", async (_req, res) => {
   try {
     SnapRaidService.runSync();
     res.json({ success: true, message: "Sincronizacion iniciada en segundo plano" });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -41,8 +42,8 @@ router.post("/pool/persist-pool", async (_req, res) => {
   try {
     await SnapRaidService.persistMergerFSPool();
     res.json({ success: true, message: "Pool de almacenamiento persistido en fstab" });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -55,8 +56,8 @@ router.post("/pool/create", async (req, res) => {
       mountPoint,
     });
     res.json({ success: true, data: pool, message: "Pool configurado correctamente" });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -64,8 +65,8 @@ router.get("/health", async (_req, res) => {
   try {
     const health = await DiskService.getHealthStatus();
     res.json({ success: true, data: health });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
