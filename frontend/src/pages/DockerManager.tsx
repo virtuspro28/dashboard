@@ -1,22 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
   AlertCircle,
-  Box,
   Loader2,
-  Play,
   RefreshCw,
-  RotateCcw,
-  Square,
   Terminal,
 } from 'lucide-react';
-
-interface ContainerInfo {
-  id: string;
-  name: string;
-  image: string;
-  state: string;
-  status: string;
-}
+import ContainerCard from '../components/dashboard/ContainerCard';
+import type { ContainerInfo } from '../types/docker';
+import { dispatchContainersChanged } from '../lib/containerEvents';
 
 interface ContainerStats {
   cpu: string;
@@ -113,9 +104,40 @@ export default function DockerManager() {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || `Fallo al ${action}`);
       await fetchContainers();
+      dispatchContainersChanged();
       if (selectedId === id) {
         await fetchPanel(id);
       }
+    } catch (err: unknown) {
+      setErrorMsg(`[${id.substring(0, 8)}] ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setProcessingId(id);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/containers/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'No se pudo eliminar el contenedor');
+      }
+
+      setContainers((current) => current.filter((container) => container.id !== id));
+      if (selectedId === id) {
+        setSelectedId(null);
+        setDetails(null);
+        setStats(null);
+        setLogs([]);
+      }
+
+      await fetchContainers();
+      dispatchContainersChanged();
     } catch (err: unknown) {
       setErrorMsg(`[${id.substring(0, 8)}] ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
@@ -175,86 +197,23 @@ export default function DockerManager() {
             </div>
           ) : (
             containers.map((container) => {
-              const isRunning = container.state === 'running';
               const isBusy = processingId === container.id;
-              const isSelected = selectedId === container.id;
 
               return (
                 <div
                   key={container.id}
-                  className={`bg-slate-900/40 backdrop-blur-md border rounded-2xl p-5 hover:bg-slate-900/70 transition-all shadow-lg flex flex-col justify-between ${isSelected ? 'border-blue-500/40' : 'border-slate-800'}`}
+                  className={selectedId === container.id ? 'rounded-2xl ring-2 ring-blue-500/40' : ''}
                 >
-                  <div>
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/20 shadow-inner">
-                          <Box className="w-6 h-6 text-blue-400" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-slate-100 truncate w-40" title={container.name}>
-                            {container.name}
-                          </h3>
-                          <p className="text-xs font-mono text-slate-400 truncate w-44" title={container.image}>
-                            {container.image}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2 bg-slate-950/60 px-3 py-1.5 rounded-full border border-slate-800">
-                        <span className={`w-2.5 h-2.5 rounded-full ${isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-                        <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
-                          {container.state}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mb-6 bg-slate-950/40 px-3 py-2 rounded-xl border border-slate-800/80">
-                      <p className="text-[11px] font-medium text-slate-400 flex flex-col">
-                        <span className="uppercase tracking-wide text-slate-500 mb-1">Estado</span>
-                        <span className="text-slate-300 font-mono truncate">{container.status || 'Desconocido'}</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => selectContainer(container.id)}
-                      className="w-full py-2.5 rounded-xl border border-white/10 bg-white/5 text-white font-semibold"
-                    >
-                      Ver detalles
-                    </button>
-                    <div className="grid grid-cols-3 gap-3">
-                      {isRunning ? (
-                        <button
-                          onClick={() => handleAction(container.id, 'stop')}
-                          disabled={isBusy}
-                          className="flex items-center justify-center py-2.5 bg-slate-800/50 hover:bg-red-500/10 text-slate-300 hover:text-red-400 border border-slate-700 hover:border-red-500/20 rounded-xl font-medium transition-colors disabled:opacity-50"
-                        >
-                          {isBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Square className="w-4 h-4 text-red-500" />}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleAction(container.id, 'start')}
-                          disabled={isBusy}
-                          className="flex items-center justify-center py-2.5 bg-blue-600/10 hover:bg-emerald-500/10 text-blue-400 hover:text-emerald-400 border border-blue-500/20 rounded-xl font-medium transition-colors disabled:opacity-50"
-                        >
-                          {isBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-4 h-4 text-emerald-500" />}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleAction(container.id, 'restart')}
-                        disabled={isBusy}
-                        className="flex items-center justify-center py-2.5 bg-white/5 hover:bg-amber-500/10 text-slate-300 hover:text-amber-300 border border-white/10 rounded-xl font-medium transition-colors disabled:opacity-50"
-                      >
-                        {isBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-                      </button>
-                      <button
-                        onClick={() => selectContainer(container.id)}
-                        className="flex items-center justify-center py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl font-medium transition-colors"
-                      >
-                        <Terminal className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
+                  <ContainerCard
+                    container={container}
+                    isProcessing={isBusy}
+                    onStart={(containerId) => void handleAction(containerId, 'start')}
+                    onStop={(containerId) => void handleAction(containerId, 'stop')}
+                    onRestart={(containerId) => void handleAction(containerId, 'restart')}
+                    onDelete={(containerId) => void handleDelete(containerId)}
+                    onDetails={(containerId) => void selectContainer(containerId)}
+                    showExtendedActions
+                  />
                 </div>
               );
             })

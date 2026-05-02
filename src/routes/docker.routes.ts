@@ -5,6 +5,7 @@ import {
   getContainerDetails,
   getContainerLogs,
   getContainerStats,
+  removeContainer,
   restartContainer,
   startContainer,
   stopContainer,
@@ -120,6 +121,27 @@ router.post("/containers/:id/restart", async (req: Request, res: Response) => {
     res.status(200).json({ success: true, message: "Contenedor reiniciado" });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error reiniciando container";
+    log.error(msg);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+router.delete("/containers/:id", async (req: Request, res: Response) => {
+  try {
+    const id = req.params["id"];
+    if (!id || Array.isArray(id)) {
+      res.status(400).json({ success: false, error: "ID de contenedor requerido" });
+      return;
+    }
+
+    await removeContainer(id, { deleteData: false });
+    res.status(200).json({
+      success: true,
+      message: "Contenedor eliminado. Los datos persistentes se han conservado.",
+      data: { id, dataDeleted: false },
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Error eliminando container";
     log.error(msg);
     res.status(500).json({ success: false, error: msg });
   }

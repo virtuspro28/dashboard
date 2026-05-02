@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ShoppingBag,
@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '../lib/errors';
+import { CONTAINERS_CHANGED_EVENT } from '../lib/containerEvents';
 
 type Protocol = 'tcp' | 'udp';
 
@@ -280,7 +281,7 @@ export default function AppStore() {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const loadApps = async () => {
+  const loadApps = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/store/apps', { credentials: 'include' });
@@ -295,11 +296,18 @@ export default function AppStore() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadApps();
-  }, []);
+    const handleContainersChanged = () => {
+      void loadApps();
+    };
+    window.addEventListener(CONTAINERS_CHANGED_EVENT, handleContainersChanged);
+    return () => {
+      window.removeEventListener(CONTAINERS_CHANGED_EVENT, handleContainersChanged);
+    };
+  }, [loadApps]);
 
   useEffect(() => {
     if (!selectedApp) return;

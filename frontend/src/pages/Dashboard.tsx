@@ -25,6 +25,7 @@ import PowerMonitorWidget from '../components/dashboard/PowerMonitorWidget';
 import SummaryRow from '../components/dashboard/SummaryRow';
 import type { ContainerInfo } from '../types/docker';
 import { getErrorMessage } from '../lib/errors';
+import { CONTAINERS_CHANGED_EVENT } from '../lib/containerEvents';
 
 interface DashboardStats {
   cpu: { usage: number; cores: number };
@@ -109,9 +110,14 @@ export default function Dashboard() {
     const interval = setInterval(() => {
       void fetchData();
     }, 5000);
+    const handleContainersChanged = () => {
+      void fetchData();
+    };
+    window.addEventListener(CONTAINERS_CHANGED_EVENT, handleContainersChanged);
     return () => {
       disposed = true;
       clearInterval(interval);
+      window.removeEventListener(CONTAINERS_CHANGED_EVENT, handleContainersChanged);
     };
   }, []);
 

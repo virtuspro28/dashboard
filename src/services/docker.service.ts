@@ -1,5 +1,7 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { logger } from "../utils/logger.js";
 import { config } from "../config/index.js";
 
@@ -30,6 +32,10 @@ export interface DockerContainerStats {
   networkIO: string;
   blockIO: string;
   pids: string;
+}
+
+export interface RemoveContainerOptions {
+  deleteData?: boolean;
 }
 
 function buildDockerError(error: any): Error {
@@ -101,6 +107,32 @@ export async function stopContainer(id: string): Promise<void> {
 
 export async function restartContainer(id: string): Promise<void> {
   await runDockerAction(`docker restart ${id}`, `Fallo al reiniciar el contenedor ${id}`);
+}
+
+export async function removeContainer(id: string, options: RemoveContainerOptions = {}): Promise<void> {
+  const { deleteData = false } = options;
+
+  if (config.platform.isWindows) {
+    return;
+  }
+
+  const details = await getContainerDetails(id);
+
+  try {
+    if (details.container.state === "running") {
+      await execAsync(`docker stop ${id}`);
+    }
+
+    await execAsync(`docker rm ${id}`);
+
+    if (deleteData) {
+      const dataPath = path.join(config.storage.basePath, "apps", details.container.name);
+      await fs.rm(dataPath, { recursive: true, force: true });
+    }
+  } catch (error: any) {
+    log.errorWithStack(`Error eliminando el contenedor ${id}`, error);
+    throw new Error(`No se pudo eliminar el contenedor ${details.container.name}. Detalle: ${error.stderr || error.message}`);
+  }
 }
 
 export async function getContainerLogs(id: string, tail = 120): Promise<string[]> {
