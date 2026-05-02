@@ -79,11 +79,15 @@ export default function MainLayout() {
 
   const handleSystemAction = async (action: 'reboot' | 'shutdown') => {
     try {
-      await fetch(`/api/system/${action}`, { method: 'POST', credentials: 'include' });
+      const response = await fetch(`/api/system/${action}`, { method: 'POST', credentials: 'include' });
+      const payload = await response.json().catch(() => ({ success: false, error: 'Respuesta no válida del servidor' }));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || `No se pudo ejecutar ${action}`);
+      }
       alert(`${action === 'reboot' ? 'Reiniciando' : 'Apagando'} sistema...`);
       setShowConfirm(null);
-    } catch {
-      alert("Error ejecutando acción de sistema");
+    } catch (error) {
+      alert(getErrorMessage(error, "Error ejecutando acción de sistema"));
     }
   };
 

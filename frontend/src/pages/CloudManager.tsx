@@ -100,9 +100,6 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
   },
 ];
 
-const SELECT_CLASSNAME = "rounded-xl border border-white/10 bg-slate-950 text-white p-4 text-sm";
-const OPTION_CLASSNAME = "bg-slate-950 text-white";
-
 interface CloudRemote {
   name: string;
   provider: RemoteProvider;
@@ -179,6 +176,16 @@ function normalizeArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value : [];
 }
 
+async function parseApiResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const text = await response.text();
+    throw new Error(text.startsWith("<") ? fallbackMessage : text || fallbackMessage);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export default function CloudManager() {
   const [providers, setProviders] = useState<ProviderDefinition[]>(PROVIDER_DEFINITIONS);
   const [remotes, setRemotes] = useState<CloudRemote[]>([]);
@@ -188,13 +195,14 @@ export default function CloudManager() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
   const [form, setForm] = useState<RemoteProfile>(EMPTY_FORM);
+  const [selectedProvider, setSelectedProvider] = useState<RemoteProvider>(EMPTY_FORM.provider);
   const [manualOptionsJson, setManualOptionsJson] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const activeProvider = useMemo(
-    () => providers.find((provider) => provider.id === form.provider),
-    [form.provider, providers],
+    () => providers.find((provider) => provider.id === selectedProvider) ?? PROVIDER_DEFINITIONS.find((provider) => provider.id === selectedProvider),
+    [providers, selectedProvider],
   );
 
   const fetchData = async () => {
@@ -206,9 +214,9 @@ export default function CloudManager() {
       ]);
 
       const [providersData, remotesData, profilesData] = await Promise.all([
-        providersRes.json(),
-        remotesRes.json(),
-        profilesRes.json(),
+        parseApiResponse<{ success: boolean; data?: unknown; error?: string }>(providersRes, "La ruta /api/cloud/providers no está devolviendo JSON válido."),
+        parseApiResponse<{ success: boolean; data?: unknown; error?: string }>(remotesRes, "La ruta /api/cloud/remotes no está devolviendo JSON válido."),
+        parseApiResponse<{ success: boolean; data?: unknown; error?: string }>(profilesRes, "La ruta /api/cloud/profiles no está devolviendo JSON válido."),
       ]);
 
       setProviders(providersData.success ? normalizeProviders(providersData.data) : PROVIDER_DEFINITIONS);
@@ -242,6 +250,7 @@ export default function CloudManager() {
   const openCreate = () => {
     setEditorMode("create");
     setForm(EMPTY_FORM);
+    setSelectedProvider(EMPTY_FORM.provider);
     setManualOptionsJson("");
     setEditorOpen(true);
   };
@@ -255,8 +264,19 @@ export default function CloudManager() {
       clientSecret: profile.clientSecret ?? "",
       token: profile.token ?? "",
     });
+    setSelectedProvider(profile.provider);
     setManualOptionsJson(buildManualOptionsJson(profile.manualOptions));
     setEditorOpen(true);
+  };
+
+  const handleProviderSelect = (provider: RemoteProvider) => {
+    setSelectedProvider(provider);
+    setForm((current) => ({
+      ...EMPTY_FORM,
+      ...current,
+      name: current.name,
+      provider,
+    }));
   };
 
   const handleMount = async (remote: CloudRemote) => {
@@ -264,7 +284,10 @@ export default function CloudManager() {
     try {
       const method = remote.isMounted ? "DELETE" : "POST";
       const res = await fetch(`/api/cloud/mount/${remote.name}`, { method, credentials: "include" });
-      const data = await res.json();
+      const data = await parseApiResponse<{ success: boolean; error?: string; message?: string }>(
+        res,
+        "La ruta de montaje de unidades devolvió una respuesta no válida.",
+      );
       if (!res.ok || !data.success) {
         throw new Error(data.error || "No se pudo cambiar el estado del montaje");
       }
@@ -288,7 +311,10 @@ export default function CloudManager() {
         method: "DELETE",
         credentials: "include",
       });
-      const data = await res.json();
+      const data = await parseApiResponse<{ success: boolean; error?: string; message?: string }>(
+        res,
+        "La ruta de borrado de perfiles devolvió una respuesta no válida.",
+      );
       if (!res.ok || !data.success) {
         throw new Error(data.error || "No se pudo eliminar la unidad");
       }
@@ -325,7 +351,10 @@ export default function CloudManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await parseApiResponse<{ success: boolean; error?: string; data?: unknown }>(
+        res,
+        "La ruta de guardado de perfiles devolvió una respuesta no válida.",
+      );
       if (!res.ok || !data.success) {
         throw new Error(data.error || "No se pudo guardar la unidad");
       }
@@ -532,30 +561,28 @@ export default function CloudManager() {
                   disabled={editorMode === "edit"}
                   required
                 />
-                  <select
-                    value={form.provider}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...EMPTY_FORM,
-                        ...current,
-                        name: current.name,
-                        provider: event.target.value as RemoteProvider,
-                      }))
-                    }
-                    className={SELECT_CLASSNAME}
-                    style={{ backgroundColor: "#020617", color: "#ffffff" }}
-                  >
-                  {providers.map((provider) => (
-                    <option
-                      key={provider.id}
-                      value={provider.id}
-                      className={OPTION_CLASSNAME}
-                      style={{ backgroundColor: "#020617", color: "#ffffff" }}
-                    >
-                      {provider.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-3">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Tipo de unidad</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {providers.map((provider) => {
+                      const isActive = provider.id === selectedProvider;
+                      return (
+                        <button
+                          key={provider.id}
+                          type="button"
+                          onClick={() => handleProviderSelect(provider.id)}
+                          className={`rounded-xl border px-3 py-3 text-left text-sm font-bold transition-all ${
+                            isActive
+                              ? "border-blue-400/40 bg-blue-500/20 text-white shadow-lg shadow-blue-900/20"
+                              : "border-white/10 bg-slate-900 text-slate-200 hover:border-white/20 hover:bg-slate-800"
+                          }`}
+                        >
+                          {provider.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               {activeProvider && (

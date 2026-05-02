@@ -33,7 +33,7 @@ router.post("/reboot", requireAuth, requireAdmin, async (_req: Request, res: Res
   try {
     log.warn("Solicitud de REINICIO de sistema recibida.");
     if (process.platform !== "win32") {
-      exec("sudo reboot");
+      exec("sudo /sbin/reboot");
     }
     res.json({ success: true, message: "Reiniciando sistema..." });
   } catch (error: any) {
@@ -45,7 +45,7 @@ router.post("/shutdown", requireAuth, requireAdmin, async (_req: Request, res: R
   try {
     log.warn("Solicitud de APAGADO de sistema recibida.");
     if (process.platform !== "win32") {
-      exec("sudo shutdown -h now");
+      exec("sudo /sbin/shutdown -h now");
     }
     res.json({ success: true, message: "Apagando sistema..." });
   } catch (error: any) {
