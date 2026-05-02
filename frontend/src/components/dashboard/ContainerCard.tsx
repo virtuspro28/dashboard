@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Play, Square, Loader2, Box, RotateCcw, Terminal, Trash2, AlertTriangle } from 'lucide-react';
 import type { ContainerInfo } from '../../types/docker';
+import { resolveAppIconAsset } from '../../lib/appIcons';
 
 interface ContainerCardProps {
   container: ContainerInfo;
@@ -25,6 +26,8 @@ export default function ContainerCard({
 }: ContainerCardProps) {
   const isRunning = container.state === 'running';
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [iconFailed, setIconFailed] = useState(false);
+  const appIcon = resolveAppIconAsset(container.name, container.image);
 
   return (
     <>
@@ -33,7 +36,16 @@ export default function ContainerCard({
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                <Box className="w-6 h-6 text-blue-400" />
+                {appIcon && !iconFailed ? (
+                  <img
+                    src={appIcon}
+                    alt={container.name}
+                    className="w-6 h-6 rounded-lg object-contain"
+                    onError={() => setIconFailed(true)}
+                  />
+                ) : (
+                  <Box className="w-6 h-6 text-blue-400" />
+                )}
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-100 truncate w-32 md:w-48" title={container.name}>

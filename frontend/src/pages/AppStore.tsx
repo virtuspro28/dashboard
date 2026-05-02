@@ -36,6 +36,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '../lib/errors';
 import { CONTAINERS_CHANGED_EVENT } from '../lib/containerEvents';
+import { resolveAppIconAsset } from '../lib/appIcons';
 
 type Protocol = 'tcp' | 'udp';
 
@@ -130,7 +131,7 @@ const LUCIDE_ICON_MAP: Record<string, LucideIcon> = {
 
 function AppIcon({ app }: { app: StoreApp }) {
   const [imageFailed, setImageFailed] = useState(false);
-  const icon = app.icon ?? '';
+  const icon = resolveAppIconAsset(app.id, app.name, app.icon) ?? app.icon ?? '';
   const normalizedIcon = icon.startsWith('assets/') ? `/${icon}` : icon;
   const isImageIcon =
     normalizedIcon.startsWith('http://') ||
