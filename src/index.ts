@@ -41,6 +41,7 @@ import apiRouter from "./routes/index.js";
 import { startSystemWatcher } from "./modules/system-watcher.js";
 import { HardwareService } from "./services/hardware.service.js";
 import { BackupService } from './services/backup.service.js';
+import { ensureStorageRootExists } from "./services/files.service.js";
 
 const log = logger.child("server");
 
@@ -64,6 +65,16 @@ function initDatabase(): void {
     }
   } catch (error: unknown) {
     log.errorWithStack("Error fatal al inicializar la base de datos", error);
+    process.exit(1);
+  }
+}
+
+async function initStorageRoot(): Promise<void> {
+  try {
+    const storagePath = await ensureStorageRootExists();
+    log.info(`Raiz de almacenamiento lista en ${storagePath}`);
+  } catch (error: unknown) {
+    log.errorWithStack("Error fatal al preparar la raiz de almacenamiento", error);
     process.exit(1);
   }
 }
@@ -162,44 +173,45 @@ setupMonitorSocket(io);
 
 getDatabase();
 
-httpServer.listen(config.server.port, () => {
-  const p = config.platform;
+void initStorageRoot().then(() => {
+  httpServer.listen(config.server.port, () => {
+    const p = config.platform;
 
-  console.log("");
-  console.log("═══════════════════════════════════════════════════════");
-  console.log("  🏠 HomeVault Dashboard v1.0.1");
-  console.log("═══════════════════════════════════════════════════════");
-  console.log("");
-  console.log(`  ▸ Servidor:       http://${config.server.host}:${config.server.port}`);
-  console.log(`  ▸ Entorno:        ${config.env}`);
-  console.log(`  ▸ Arquitectura:   ${p.arch} ${p.isARM ? "(ARM — modo Raspberry Pi)" : "(x86_64 — modo servidor estándar)"}`);
-  console.log(`  ▸ Plataforma:     ${p.os}`);
-  console.log(`  ▸ CPU:            ${p.cpuCores} núcleos`);
-  console.log(`  ▸ Memoria:        ${p.totalMemoryMB} MB (tier: ${p.memoryTier})`);
-  console.log(`  ▸ Hostname:       ${p.hostname}`);
-  console.log(`  ▸ Node.js:        ${p.nodeVersion}`);
-  console.log(`  ▸ Base de datos:  ${config.paths.database}`);
-  console.log("");
+    console.log("");
+    console.log("═══════════════════════════════════════════════════════");
+    console.log("  🏠 HomeVault Dashboard v1.0.2");
+    console.log("═══════════════════════════════════════════════════════");
+    console.log("");
+    console.log(`  ▸ Servidor:       http://${config.server.host}:${config.server.port}`);
+    console.log(`  ▸ Entorno:        ${config.env}`);
+    console.log(`  ▸ Arquitectura:   ${p.arch} ${p.isARM ? "(ARM — modo Raspberry Pi)" : "(x86_64 — modo servidor estándar)"}`);
+    console.log(`  ▸ Plataforma:     ${p.os}`);
+    console.log(`  ▸ CPU:            ${p.cpuCores} núcleos`);
+    console.log(`  ▸ Memoria:        ${p.totalMemoryMB} MB (tier: ${p.memoryTier})`);
+    console.log(`  ▸ Hostname:       ${p.hostname}`);
+    console.log(`  ▸ Node.js:        ${p.nodeVersion}`);
+    console.log(`  ▸ Base de datos:  ${config.paths.database}`);
+    console.log("");
 
-  if (p.memoryTier === "critical") {
-    log.warn("⚠️  Memoria crítica (<512 MB). Optimizaciones de bajo consumo activas.");
-  } else if (p.memoryTier === "low") {
-    log.warn("⚠️  Memoria limitada (<1 GB). Cache de SQLite reducido.");
-  }
+    if (p.memoryTier === "critical") {
+      log.warn("⚠️  Memoria crítica (<512 MB). Optimizaciones de bajo consumo activas.");
+    } else if (p.memoryTier === "low") {
+      log.warn("⚠️  Memoria limitada (<1 GB). Cache de SQLite reducido.");
+    }
 
-  log.info("✅ Servidor listo. API disponible en /api/*");
-  console.log("═══════════════════════════════════════════════════════");
-  console.log("");
+    log.info("✅ Servidor listo. API disponible en /api/*");
+    console.log("═══════════════════════════════════════════════════════");
+    console.log("");
 
-  // Iniciar monitoreo en segundo plano
-  startSystemWatcher();
-  
-  import("./services/ups.service.js").then(({ UpsService }) => {
-    UpsService.startMonitoring();
+    startSystemWatcher();
+
+    import("./services/ups.service.js").then(({ UpsService }) => {
+      UpsService.startMonitoring();
+    });
+
+    HardwareService.init();
+    BackupService.initScheduler();
   });
-
-  HardwareService.init();
-  BackupService.initScheduler();
 });
 
 export default app;

@@ -561,7 +561,7 @@ export default function CloudManager() {
                   disabled={editorMode === "edit"}
                   required
                 />
-                <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-3">
+                <div className="overflow-visible rounded-2xl border border-white/10 bg-slate-950/80 p-3">
                   <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Tipo de unidad</p>
                   <div className="grid grid-cols-2 gap-2">
                     {providers.map((provider) => {
@@ -574,7 +574,7 @@ export default function CloudManager() {
                           className={`rounded-xl border px-3 py-3 text-left text-sm font-bold transition-all ${
                             isActive
                               ? "border-blue-400/40 bg-blue-500/20 text-white shadow-lg shadow-blue-900/20"
-                              : "border-white/10 bg-slate-900 text-slate-200 hover:border-white/20 hover:bg-slate-800"
+                              : "border-white/10 bg-slate-900 text-white hover:border-blue-400/30 hover:bg-slate-800 hover:text-blue-300"
                           }`}
                         >
                           {provider.label}

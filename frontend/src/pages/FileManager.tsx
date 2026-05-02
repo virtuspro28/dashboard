@@ -12,10 +12,11 @@ import {
   Image as ImageIcon,
   Film,
   Music,
-  MoreVertical,
-  X
+  MoreVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const FILES_LIST_ENDPOINT = '/api/files/list';
 
 interface FileItem {
   name: string;
@@ -37,7 +38,7 @@ export default function FileManager() {
     setLoading(true);
     try {
       const requestPath = path && path.trim() ? path : '/';
-      const res = await fetch(`/api/files/list?path=${encodeURIComponent(requestPath)}`, { credentials: 'include' });
+      const res = await fetch(`${FILES_LIST_ENDPOINT}?path=${encodeURIComponent(requestPath)}`, { credentials: 'include' });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'No se pudo cargar el directorio');
@@ -299,10 +300,11 @@ export default function FileManager() {
           </div>
         )}
 
-        {!loading && filteredFiles.length === 0 && (
+        {!loading && !error && filteredFiles.length === 0 && (
           <div className="py-20 text-center">
-             <X className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-10" />
-             <p className="text-slate-500 font-bold">Esta carpeta está vacía</p>
+             <FolderOpen className="mx-auto mb-4 h-12 w-12 text-blue-400/70" />
+             <p className="font-bold text-slate-300">Esta carpeta está vacía</p>
+             <p className="mt-2 text-sm text-slate-500">Crea una carpeta nueva o sube archivos para empezar.</p>
           </div>
         )}
       </div>

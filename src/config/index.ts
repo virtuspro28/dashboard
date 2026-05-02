@@ -103,6 +103,7 @@ export interface AppConfig {
 
 const env = process.env["NODE_ENV"] === "production" ? "production" : "development";
 const dataDir = process.env["DATA_DIR"] ?? path.join(PROJECT_ROOT, "data");
+const HOMEVAULT_STORAGE_ROOT = "/opt/homevault/data";
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -141,7 +142,7 @@ export const config: AppConfig = Object.freeze({
   }),
 
   storage: Object.freeze({
-    basePath: process.env["BASE_STORAGE_PATH"] ?? (os.platform() === "win32" ? "C:\\" : "/opt/homevault/data"),
+    basePath: HOMEVAULT_STORAGE_ROOT,
   }),
 
   platform: Object.freeze({

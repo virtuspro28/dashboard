@@ -31,6 +31,12 @@ function getStorageBasePath(): string {
   return path.resolve(basePath);
 }
 
+export async function ensureStorageRootExists(): Promise<string> {
+  const basePath = getStorageBasePath();
+  await fs.mkdir(basePath, { recursive: true });
+  return basePath;
+}
+
 function isPathInside(basePath: string, targetPath: string): boolean {
   const relative = path.relative(basePath, targetPath);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
@@ -61,7 +67,7 @@ export async function listFiles(reqPath: string = ''): Promise<FileItem[]> {
 
   try {
     if (!normalizedPath) {
-      await fs.mkdir(targetPath, { recursive: true });
+      await ensureStorageRootExists();
     }
 
     const stat = await fs.stat(targetPath);
@@ -112,7 +118,7 @@ export async function listFiles(reqPath: string = ''): Promise<FileItem[]> {
   } catch (error: any) {
     if (error.code === 'ENOENT') {
       if (!normalizedPath) {
-        await fs.mkdir(targetPath, { recursive: true });
+        await ensureStorageRootExists();
         return [];
       }
       throw new Error(`Directory not found: ${normalizedPath ? `/${normalizedPath}` : '/'}`);
