@@ -1,21 +1,21 @@
-import { useState, useEffect } from 'react';
-import { 
-  FileCode, 
-  Save, 
-  RotateCw, 
-  CheckCircle2, 
-  AlertCircle, 
+import { useCallback, useEffect, useState } from 'react';
+import {
+  FileCode,
+  Save,
+  RotateCw,
+  CheckCircle2,
+  AlertCircle,
   ChevronRight,
   FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Editor from 'react-simple-code-editor';
-// @ts-ignore
-import { highlight, languages } from 'prismjs';
+import Prism from 'prismjs';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-bash';
 import 'prismjs/themes/prism-tomorrow.css';
+import { getErrorMessage } from '../lib/errors';
 
 interface ConfigFile {
   name: string;
@@ -31,36 +31,47 @@ export default function ConfigEditor() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
 
-  useEffect(() => {
-    fetchFiles();
-  }, []);
-
-  const fetchFiles = async () => {
-    try {
-      const res = await fetch('/api/config/files');
-      const data = await res.json();
-      if (data.success) {
-        setFiles(data.data);
-        if (data.data.length > 0) handleSelectFile(data.data[0]);
-      }
-    } catch (err) {
-      console.error('Error fetching config files:', err);
-    } finally {
-      setLoading(false);
-    }
+  const getHighlightLanguage = (type: ConfigFile['type']) => {
+    if (type === 'yaml') return Prism.languages.yaml;
+    if (type === 'json') return Prism.languages.json;
+    return Prism.languages.bash;
   };
 
   const handleSelectFile = async (file: ConfigFile) => {
     setSelectedFile(file);
     setContent('Cargando...');
     try {
-      const res = await fetch(`/api/config/read?path=${encodeURIComponent(file.path)}`);
+      const res = await fetch(`/api/config/read?path=${encodeURIComponent(file.path)}`, { credentials: 'include' });
       const data = await res.json();
-      if (data.success) setContent(data.content);
-    } catch (err) {
+      if (data.success) {
+        setContent(data.data);
+      }
+    } catch {
       setContent('Error al cargar el archivo.');
     }
   };
+
+  const fetchFiles = useCallback(async () => {
+    try {
+      const res = await fetch('/api/config/files', { credentials: 'include' });
+      const data = await res.json();
+      if (data.success) {
+        const nextFiles = data.data as ConfigFile[];
+        setFiles(nextFiles);
+        if (nextFiles.length > 0) {
+          await handleSelectFile(nextFiles[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching config files:', getErrorMessage(error, 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchFiles();
+  }, [fetchFiles]);
 
   const handleSave = async () => {
     if (!selectedFile) return;
@@ -70,6 +81,7 @@ export default function ConfigEditor() {
       const res = await fetch('/api/config/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ path: selectedFile.path, content })
       });
       const data = await res.json();
@@ -78,7 +90,7 @@ export default function ConfigEditor() {
       } else {
         setStatus({ type: 'error', msg: data.error || 'Error al guardar' });
       }
-    } catch (err) {
+    } catch {
       setStatus({ type: 'error', msg: 'Error de red al guardar' });
     } finally {
       setSaving(false);
@@ -105,7 +117,7 @@ export default function ConfigEditor() {
             <p className="text-sm text-slate-500 font-bold uppercase tracking-widest mt-1">Gestión avanzada de archivos .conf, .yaml y .env</p>
           </div>
         </div>
-        <button 
+        <button
           onClick={handleSave}
           disabled={saving || !selectedFile}
           className="flex items-center space-x-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50"
@@ -116,18 +128,17 @@ export default function ConfigEditor() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Explorador de Archivos */}
         <div className="bg-slate-900/40 backdrop-blur-md border border-white/5 rounded-[2.5rem] p-6 lg:col-span-1">
           <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] mb-6 px-2">Archivos Críticos</h3>
           <div className="space-y-2">
             {files.map((file) => (
               <button
                 key={file.path}
-                onClick={() => handleSelectFile(file)}
+                onClick={() => void handleSelectFile(file)}
                 className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all ${
-                  selectedFile?.path === file.path 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
-                  : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                  selectedFile?.path === file.path
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 <div className="flex items-center space-x-3 overflow-hidden">
@@ -140,7 +151,6 @@ export default function ConfigEditor() {
           </div>
         </div>
 
-        {/* Editor */}
         <div className="lg:col-span-3 space-y-4">
           <AnimatePresence mode="wait">
             {status && (
@@ -149,9 +159,9 @@ export default function ConfigEditor() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className={`p-4 rounded-2xl border flex items-center space-x-3 ${
-                  status.type === 'success' 
-                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
-                  : 'bg-red-500/10 border-red-500/20 text-red-400'
+                  status.type === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    : 'bg-red-500/10 border-red-500/20 text-red-400'
                 }`}
               >
                 {status.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
@@ -162,22 +172,19 @@ export default function ConfigEditor() {
 
           <div className="bg-slate-950 border border-white/5 rounded-[2.5rem] overflow-hidden min-h-[600px] font-mono text-sm">
             <div className="p-4 bg-white/5 border-b border-white/5 flex items-center space-x-2">
-               <div className="flex space-x-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/20"></div>
-                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20"></div>
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/20"></div>
-               </div>
-               <span className="text-[10px] font-bold text-slate-500 uppercase ml-4">{selectedFile?.path || 'Ningún archivo seleccionado'}</span>
+              <div className="flex space-x-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500/20"></div>
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20"></div>
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/20"></div>
+              </div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase ml-4">{selectedFile?.path || 'Ningún archivo seleccionado'}</span>
             </div>
-            
+
             <div className="p-6">
               <Editor
                 value={content}
-                onValueChange={code => setContent(code)}
-                highlight={code => highlight(code, 
-                  selectedFile?.type === 'yaml' ? languages.yaml : 
-                  selectedFile?.type === 'json' ? languages.json : 
-                  languages.bash, 'editor')}
+                onValueChange={(code) => setContent(code)}
+                highlight={(code) => Prism.highlight(code, getHighlightLanguage(selectedFile?.type ?? 'conf'), 'editor')}
                 padding={20}
                 className="code-editor"
                 style={{

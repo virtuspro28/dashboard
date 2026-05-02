@@ -14,15 +14,20 @@ export interface FileItem {
   mtime: Date;
 }
 
+function isPathInside(basePath: string, targetPath: string): boolean {
+  const relative = path.relative(basePath, targetPath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
 /**
  * Validates that the target path is within the allowed BASE_STORAGE_PATH.
  * Prevents Path Traversal Attacks.
  */
-function getAbsolutePath(reqPath: string = ''): string {
-  const base = path.normalize(config.storage.basePath);
-  const target = path.normalize(path.join(base, reqPath));
+export function resolveStoragePath(reqPath: string = ''): string {
+  const base = path.resolve(config.storage.basePath);
+  const target = path.resolve(base, reqPath);
 
-  if (!target.startsWith(base)) {
+  if (!isPathInside(base, target)) {
     log.warn(`Blocked traversal attempt: ${target}`);
     throw new Error('Access Denied: Path Traversal Attempt');
   }
@@ -33,7 +38,7 @@ function getAbsolutePath(reqPath: string = ''): string {
  * List files and directories in a given path.
  */
 export async function listFiles(reqPath: string = ''): Promise<FileItem[]> {
-  const targetPath = getAbsolutePath(reqPath);
+  const targetPath = resolveStoragePath(reqPath);
 
   try {
     const stat = await fs.stat(targetPath);
@@ -90,7 +95,7 @@ export async function listFiles(reqPath: string = ''): Promise<FileItem[]> {
  * Create a new directory.
  */
 export async function createDirectory(reqPath: string, name: string): Promise<void> {
-  const targetPath = getAbsolutePath(path.join(reqPath, name));
+  const targetPath = resolveStoragePath(path.join(reqPath, name));
   await fs.mkdir(targetPath, { recursive: true });
 }
 
@@ -98,7 +103,7 @@ export async function createDirectory(reqPath: string, name: string): Promise<vo
  * Delete a file or directory.
  */
 export async function deleteItem(reqPath: string): Promise<void> {
-  const targetPath = getAbsolutePath(reqPath);
+  const targetPath = resolveStoragePath(reqPath);
   await fs.rm(targetPath, { recursive: true, force: true });
 }
 
@@ -106,8 +111,8 @@ export async function deleteItem(reqPath: string): Promise<void> {
  * Rename or move an item.
  */
 export async function renameItem(oldPath: string, newPath: string): Promise<void> {
-  const oldAbs = getAbsolutePath(oldPath);
-  const newAbs = getAbsolutePath(newPath);
+  const oldAbs = resolveStoragePath(oldPath);
+  const newAbs = resolveStoragePath(newPath);
   await fs.rename(oldAbs, newAbs);
 }
 
@@ -116,7 +121,7 @@ export async function renameItem(oldPath: string, newPath: string): Promise<void
  * Note: For very large drives, this should be optimized with an index.
  */
 export async function searchFiles(query: string, maxResults: number = 100): Promise<FileItem[]> {
-  const base = path.normalize(config.storage.basePath);
+  const base = path.resolve(config.storage.basePath);
   const results: FileItem[] = [];
   const lowercaseQuery = query.toLowerCase();
 

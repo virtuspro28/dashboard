@@ -104,6 +104,15 @@ export interface AppConfig {
 const env = process.env["NODE_ENV"] === "production" ? "production" : "development";
 const dataDir = process.env["DATA_DIR"] ?? path.join(PROJECT_ROOT, "data");
 
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  return value;
+}
+
 /**
  * Cache de SQLite adaptativo según la memoria disponible.
  * En RPi con poca RAM, reducimos el cache para no competir
@@ -132,7 +141,7 @@ export const config: AppConfig = Object.freeze({
   }),
 
   storage: Object.freeze({
-    basePath: process.env["BASE_STORAGE_PATH"] ?? (os.platform() === "win32" ? "C:\\" : "/mnt/storage"),
+    basePath: process.env["BASE_STORAGE_PATH"] ?? (os.platform() === "win32" ? "C:\\" : "/opt/homevault/data"),
   }),
 
   platform: Object.freeze({
@@ -154,7 +163,7 @@ export const config: AppConfig = Object.freeze({
   }),
 
   auth: Object.freeze({
-    jwtSecret: process.env["JWT_SECRET"] ?? "homevault-default-secret-change-me",
+    jwtSecret: requireEnv("JWT_SECRET"),
   }),
 
   logger: Object.freeze({

@@ -1,18 +1,19 @@
-import { useState, useEffect } from 'react';
-import { 
-  Shield, 
-  Plus, 
-  ExternalLink, 
-  HardDrive, 
-  Clock, 
-  CheckCircle2, 
-  Play, 
+import { useEffect, useState } from 'react';
+import {
+  Shield,
+  Plus,
+  ExternalLink,
+  HardDrive,
+  Clock,
+  CheckCircle2,
+  Play,
   Usb,
   FolderOpen,
   Loader2,
   Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getErrorMessage } from '../lib/errors';
 
 interface BackupTask {
   id: string;
@@ -25,25 +26,30 @@ interface BackupTask {
   status: 'idle' | 'running' | 'success' | 'failed';
 }
 
+interface UsbDrive {
+  label?: string;
+  mountPoint: string;
+  capacity: string;
+}
+
 export default function BackupManager() {
   const [tasks, setTasks] = useState<BackupTask[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [usbDrives, setUsbDrives] = useState<any[]>([]);
+  const [usbDrives, setUsbDrives] = useState<UsbDrive[]>([]);
   const [executingTaskId, setExecutingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchTasks();
-    fetchUsbDrives();
+    void fetchTasks();
+    void fetchUsbDrives();
   }, []);
 
   const fetchTasks = async () => {
     try {
-      const res = await fetch('/api/backups/tasks');
+      const res = await fetch('/api/backup/tasks', { credentials: 'include' });
       const data = await res.json();
       if (data.success) setTasks(data.data);
-    } catch (err) {
-      console.error('Error fetching backup tasks:', err);
+    } catch (error) {
+      console.error('Error fetching backup tasks:', getErrorMessage(error, 'Unknown error'));
     } finally {
       setLoading(false);
     }
@@ -51,24 +57,24 @@ export default function BackupManager() {
 
   const fetchUsbDrives = async () => {
     try {
-      const res = await fetch('/api/backups/usb-drives');
+      const res = await fetch('/api/backup/usb', { credentials: 'include' });
       const data = await res.json();
       if (data.success) setUsbDrives(data.data);
-    } catch (err) {
-      console.error('Error scanning USB drives:', err);
+    } catch (error) {
+      console.error('Error scanning USB drives:', getErrorMessage(error, 'Unknown error'));
     }
   };
 
   const handleRunTask = async (taskId: string) => {
     setExecutingTaskId(taskId);
     try {
-      const res = await fetch(`/api/backups/tasks/${taskId}/run`, { method: 'POST' });
+      const res = await fetch(`/api/backup/run/${taskId}`, { method: 'POST', credentials: 'include' });
       const data = await res.json();
       if (data.success) {
         alert('Tarea de respaldo iniciada');
-        fetchTasks();
+        void fetchTasks();
       }
-    } catch (err) {
+    } catch {
       alert('Error al iniciar respaldo');
     } finally {
       setExecutingTaskId(null);
@@ -78,9 +84,9 @@ export default function BackupManager() {
   const handleDeleteTask = async (taskId: string) => {
     if (!confirm('¿Seguro que deseas eliminar esta tarea?')) return;
     try {
-      await fetch(`/api/backups/tasks/${taskId}`, { method: 'DELETE' });
-      fetchTasks();
-    } catch (err) {
+      await fetch(`/api/backup/tasks/${taskId}`, { method: 'DELETE', credentials: 'include' });
+      void fetchTasks();
+    } catch {
       alert('Error al eliminar tarea');
     }
   };
@@ -95,7 +101,6 @@ export default function BackupManager() {
 
   return (
     <div className="space-y-8 pb-12">
-      {/* Header Centralizado */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/40 backdrop-blur-md p-8 rounded-[2.5rem] border border-white/5">
         <div className="flex items-center space-x-4">
           <div className="p-4 bg-emerald-500/10 rounded-2xl">
@@ -106,7 +111,7 @@ export default function BackupManager() {
             <p className="text-sm text-slate-500 font-bold uppercase tracking-widest mt-1">Estrategia 3-2-1 Protegida</p>
           </div>
         </div>
-        <button 
+        <button
           onClick={() => alert('Próximamente')}
           className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black transition-all shadow-lg shadow-blue-600/20"
         >
@@ -116,7 +121,6 @@ export default function BackupManager() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Lista de Tareas Principal */}
         <div className="lg:col-span-2 space-y-6">
           <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] flex items-center space-x-2">
             <Clock className="w-4 h-4" />
@@ -125,7 +129,7 @@ export default function BackupManager() {
 
           <AnimatePresence mode="popLayout">
             {tasks.map((task) => (
-              <motion.div 
+              <motion.div
                 key={task.id}
                 layout
                 initial={{ opacity: 0, y: 20 }}
@@ -169,15 +173,15 @@ export default function BackupManager() {
                   </div>
 
                   <div className="flex items-center md:flex-col justify-end gap-2">
-                    <button 
-                      onClick={() => handleRunTask(task.id)}
+                    <button
+                      onClick={() => void handleRunTask(task.id)}
                       disabled={task.status === 'running' || executingTaskId === task.id}
                       className="p-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all disabled:opacity-50"
                     >
                       {executingTaskId === task.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
                     </button>
-                    <button 
-                      onClick={() => handleDeleteTask(task.id)}
+                    <button
+                      onClick={() => void handleDeleteTask(task.id)}
                       className="p-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all"
                     >
                       <Trash2 className="w-5 h-5" />
@@ -196,7 +200,6 @@ export default function BackupManager() {
           )}
         </div>
 
-        {/* Panel Lateral: Discos USB */}
         <div className="space-y-6">
           <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] flex items-center space-x-2">
             <Usb className="w-4 h-4" />

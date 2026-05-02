@@ -35,7 +35,7 @@ export default function ActiveBackup() {
       } else {
         setError(data.error);
       }
-    } catch (err) {
+    } catch {
       setError('Error al conectar con el servidor de backup');
     } finally {
       setLoading(false);

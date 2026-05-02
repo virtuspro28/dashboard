@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
-import { 
-  FolderLock, 
-  Plus, 
-  Trash2, 
-  HardDrive, 
-  Network, 
-  Shield, 
-  ToggleLeft, 
+import { useCallback, useEffect, useState } from 'react';
+import {
+  FolderLock,
+  Plus,
+  Trash2,
+  HardDrive,
+  Network,
+  Shield,
+  ToggleLeft,
   ToggleRight,
   Loader2,
   FolderOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getErrorMessage } from '../lib/errors';
 
 interface Share {
   name: string;
@@ -26,6 +27,13 @@ interface ProtocolState {
   enabled: boolean;
 }
 
+type NewShare = {
+  name: string;
+  path: string;
+  readOnly: boolean;
+  type: 'SMB' | 'NFS';
+};
+
 const SharedFolders: React.FC = () => {
   const [shares, setShares] = useState<Share[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,13 +42,9 @@ const SharedFolders: React.FC = () => {
     nfs: { protocol: 'nfs', active: false, enabled: false },
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newShare, setNewShare] = useState({ name: '', path: '', readOnly: false, type: 'SMB' });
+  const [newShare, setNewShare] = useState<NewShare>({ name: '', path: '', readOnly: false, type: 'SMB' });
 
-  useEffect(() => {
-    fetchShares();
-  }, []);
-
-  const fetchShares = async () => {
+  const fetchShares = useCallback(async () => {
     setLoading(true);
     try {
       const [sharesRes, protocolsRes] = await Promise.all([
@@ -52,18 +56,27 @@ const SharedFolders: React.FC = () => {
         setShares(sharesData.data);
       }
       if (protocolsData.success) {
-        const nextState = { ...protocols };
-        (protocolsData.data as ProtocolState[]).forEach((entry) => {
-          nextState[entry.protocol] = entry;
+        setProtocols((previous) => {
+          const nextState: Record<'smb' | 'nfs', ProtocolState> = {
+            smb: { ...previous.smb },
+            nfs: { ...previous.nfs },
+          };
+          (protocolsData.data as ProtocolState[]).forEach((entry) => {
+            nextState[entry.protocol] = entry;
+          });
+          return nextState;
         });
-        setProtocols(nextState);
       }
-    } catch (err) {
-      console.error('Error fetching shares');
+    } catch (error) {
+      console.error('Error fetching shares', getErrorMessage(error, 'Unknown error'));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void fetchShares();
+  }, [fetchShares]);
 
   const handleCreateShare = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,11 +92,11 @@ const SharedFolders: React.FC = () => {
       if (data.success) {
         setIsModalOpen(false);
         setNewShare({ name: '', path: '', readOnly: false, type: 'SMB' });
-        fetchShares();
+        void fetchShares();
       } else {
         alert(data.error);
       }
-    } catch (err) {
+    } catch {
       alert('Error creating share');
     }
   };
@@ -93,8 +106,8 @@ const SharedFolders: React.FC = () => {
     try {
       const res = await fetch(`/api/samba/shares/${name}`, { method: 'DELETE', credentials: 'include' });
       const data = await res.json();
-      if (data.success) fetchShares();
-    } catch (err) {
+      if (data.success) void fetchShares();
+    } catch {
       alert('Error deleting share');
     }
   };
@@ -111,7 +124,7 @@ const SharedFolders: React.FC = () => {
       if (data.success) {
         await fetchShares();
       }
-    } catch (err) {
+    } catch {
       alert('Error toggling protocol');
     }
   };
@@ -127,7 +140,7 @@ const SharedFolders: React.FC = () => {
           <p className="text-slate-400 mt-2">Gestiona el acceso a tus archivos desde la red local (SMB/NFS)</p>
         </div>
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20"
           >
@@ -136,7 +149,6 @@ const SharedFolders: React.FC = () => {
         </div>
       </div>
 
-      {/* Protocol Toggles */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
         <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -148,7 +160,7 @@ const SharedFolders: React.FC = () => {
               <p className="text-xs text-slate-500">Compatible con Windows, macOS y Android</p>
             </div>
           </div>
-          <button onClick={() => toggleProtocol('smb', protocols.smb.enabled)}>
+          <button onClick={() => void toggleProtocol('smb', protocols.smb.enabled)}>
             {protocols.smb.enabled ? <ToggleRight className="w-10 h-10 text-green-500" /> : <ToggleLeft className="w-10 h-10 text-slate-600" />}
           </button>
         </div>
@@ -162,13 +174,12 @@ const SharedFolders: React.FC = () => {
               <p className="text-xs text-slate-500">Alto rendimiento para servidores Linux</p>
             </div>
           </div>
-          <button onClick={() => toggleProtocol('nfs', protocols.nfs.enabled)}>
+          <button onClick={() => void toggleProtocol('nfs', protocols.nfs.enabled)}>
             {protocols.nfs.enabled ? <ToggleRight className="w-10 h-10 text-purple-500" /> : <ToggleLeft className="w-10 h-10 text-slate-600" />}
           </button>
         </div>
       </div>
 
-      {/* Shares Table */}
       <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
         <table className="w-full text-left">
           <thead>
@@ -213,8 +224,8 @@ const SharedFolders: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-5 text-right">
-                    <button 
-                      onClick={() => handleDeleteShare(share.name)}
+                    <button
+                      onClick={() => void handleDeleteShare(share.name)}
                       className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
                     >
                       <Trash2 className="w-5 h-5" />
@@ -227,11 +238,10 @@ const SharedFolders: React.FC = () => {
         </table>
       </div>
 
-      {/* New Share Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -244,16 +254,16 @@ const SharedFolders: React.FC = () => {
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Protocolo</label>
                   <div className="flex gap-2">
-                    {['SMB', 'NFS'].map(t => (
-                      <button 
-                        key={t}
+                    {['SMB', 'NFS'].map((type) => (
+                      <button
+                        key={type}
                         type="button"
-                        onClick={() => setNewShare({...newShare, type: t})}
+                        onClick={() => setNewShare({ ...newShare, type: type as NewShare['type'] })}
                         className={`flex-1 py-3 rounded-xl border font-bold transition-all ${
-                          newShare.type === t ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'
+                          newShare.type === type ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'
                         }`}
                       >
-                        {t}
+                        {type}
                       </button>
                     ))}
                   </div>
@@ -262,12 +272,12 @@ const SharedFolders: React.FC = () => {
                 {newShare.type === 'SMB' && (
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Nombre del Recurso</label>
-                    <input 
+                    <input
                       type="text"
                       className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="ej: Multimedia"
                       value={newShare.name}
-                      onChange={e => setNewShare({...newShare, name: e.target.value})}
+                      onChange={(e) => setNewShare({ ...newShare, name: e.target.value })}
                       required
                     />
                   </div>
@@ -275,23 +285,23 @@ const SharedFolders: React.FC = () => {
 
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Ruta Local (Pool)</label>
-                  <input 
+                  <input
                     type="text"
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                     placeholder="/mnt/storage/movies"
                     value={newShare.path}
-                    onChange={e => setNewShare({...newShare, path: e.target.value})}
+                    onChange={(e) => setNewShare({ ...newShare, path: e.target.value })}
                     required
                   />
                 </div>
 
                 {newShare.type === 'SMB' && (
                   <div className="flex items-center gap-3 p-4 bg-slate-800/50 rounded-xl border border-slate-800">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       id="ro"
                       checked={newShare.readOnly}
-                      onChange={e => setNewShare({...newShare, readOnly: e.target.checked})}
+                      onChange={(e) => setNewShare({ ...newShare, readOnly: e.target.checked })}
                       className="w-5 h-5 rounded accent-blue-500"
                     />
                     <label htmlFor="ro" className="text-sm font-medium text-slate-300">Solo lectura (Los clientes no podrán modificar archivos)</label>
@@ -299,14 +309,14 @@ const SharedFolders: React.FC = () => {
                 )}
 
                 <div className="flex gap-3 pt-4">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
                     className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold transition-all"
                   >
                     Cancelar
                   </button>
-                  <button 
+                  <button
                     type="submit"
                     className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20"
                   >

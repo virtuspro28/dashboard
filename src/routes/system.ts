@@ -29,7 +29,7 @@ function getPackageVersion(): string {
   }
 }
 
-router.post("/reboot", requireAuth, async (_req: Request, res: Response) => {
+router.post("/reboot", requireAuth, requireAdmin, async (_req: Request, res: Response) => {
   try {
     log.warn("Solicitud de REINICIO de sistema recibida.");
     if (process.platform !== "win32") {
@@ -41,7 +41,7 @@ router.post("/reboot", requireAuth, async (_req: Request, res: Response) => {
   }
 });
 
-router.post("/shutdown", requireAuth, async (_req: Request, res: Response) => {
+router.post("/shutdown", requireAuth, requireAdmin, async (_req: Request, res: Response) => {
   try {
     log.warn("Solicitud de APAGADO de sistema recibida.");
     if (process.platform !== "win32") {
@@ -87,7 +87,7 @@ router.get("/processes", requireAuth, async (_req: Request, res: Response) => {
   }
 });
 
-router.delete("/processes/:pid", requireAuth, async (req: Request, res: Response) => {
+router.delete("/processes/:pid", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const pid = req.params["pid"];
     if (process.platform !== "win32") {
@@ -197,10 +197,37 @@ router.get("/update/check", requireAuth, async (_req: Request, res: Response) =>
   }
 });
 
+router.get("/check-updates", requireAuth, async (_req: Request, res: Response) => {
+  try {
+    const data = await UpdateService.checkForUpdates();
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.post("/update/apply", requireAuth, async (_req: Request, res: Response) => {
   try {
-    await UpdateService.performUpdate();
-    res.json({ success: true, message: "Actualización iniciada" });
+    const result = await UpdateService.performUpdate();
+    res.status(result.success ? 200 : 500).json(result);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post("/update", requireAuth, async (_req: Request, res: Response) => {
+  try {
+    const result = await UpdateService.performUpdate();
+    res.status(result.success ? 200 : 500).json(result);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post("/update/system", requireAuth, async (_req: Request, res: Response) => {
+  try {
+    const result = await UpdateService.updateSystemPackages();
+    res.status(result.success ? 200 : 500).json(result);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

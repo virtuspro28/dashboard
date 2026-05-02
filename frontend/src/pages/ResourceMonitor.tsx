@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { 
   Activity,
   Cpu,
@@ -27,14 +27,14 @@ const ResourceMonitor: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedLogs, setSelectedLogs] = useState<string | null>(null);
   const [logsContent, setLogsContent] = useState<string[]>([]);
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const newSocket = io({
-      auth: { token: localStorage.getItem('token') } // Assuming token is here
+    const newSocket = io('/monitor', {
+      withCredentials: true,
     });
 
-    setSocket(newSocket);
+    socketRef.current = newSocket;
 
     newSocket.emit('docker:stats:subscribe');
 
@@ -46,13 +46,14 @@ const ResourceMonitor: React.FC = () => {
     return () => {
       newSocket.emit('docker:stats:unsubscribe');
       newSocket.disconnect();
+      socketRef.current = null;
     };
   }, []);
 
   useEffect(() => {
+    const socket = socketRef.current;
     if (selectedLogs && socket) {
       socket.emit('docker:logs:subscribe', selectedLogs);
-      setLogsContent([]);
 
       const logHandler = (data: string) => {
         setLogsContent(prev => [...prev.slice(-100), data]);
@@ -65,7 +66,7 @@ const ResourceMonitor: React.FC = () => {
         socket.off(`docker:logs:data:${selectedLogs}`, logHandler);
       };
     }
-  }, [selectedLogs, socket]);
+  }, [selectedLogs]);
 
   const parsePerc = (val: string) => parseFloat(val.replace('%', '')) || 0;
 
@@ -157,7 +158,10 @@ const ResourceMonitor: React.FC = () => {
                 {/* Actions */}
                 <div className="flex items-center justify-end gap-3">
                   <button 
-                    onClick={() => setSelectedLogs(container.ID)}
+                    onClick={() => {
+                      setLogsContent([]);
+                      setSelectedLogs(container.ID);
+                    }}
                     className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-medium transition-colors border border-slate-700"
                   >
                     <Terminal className="w-4 h-4 text-blue-400" /> Real-time Logs
@@ -185,7 +189,10 @@ const ResourceMonitor: React.FC = () => {
                   <span className="font-bold">Streaming Logs: {stats.find(s => s.ID === selectedLogs)?.Name || selectedLogs}</span>
                 </div>
                 <button 
-                  onClick={() => setSelectedLogs(null)}
+                  onClick={() => {
+                    setLogsContent([]);
+                    setSelectedLogs(null);
+                  }}
                   className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
                 >
                   <X />

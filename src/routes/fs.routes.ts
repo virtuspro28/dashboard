@@ -8,7 +8,8 @@ import {
   createDirectory, 
   deleteItem, 
   renameItem, 
-  searchFiles 
+  searchFiles,
+  resolveStoragePath,
 } from "../services/files.service.js";
 import { QuotaService } from "../services/quota.service.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
@@ -26,12 +27,17 @@ router.use(requireAuth);
  */
 const storage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const dest = req.query["path"] ? path.join(config.storage.basePath, req.query["path"] as string) : config.storage.basePath;
-    // Ensure destination exists
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
+    try {
+      const requestPath = typeof req.query["path"] === "string" ? req.query["path"] : "";
+      const dest = resolveStoragePath(requestPath);
+      if (!fs.existsSync(dest)) {
+        fs.mkdirSync(dest, { recursive: true });
+      }
+      cb(null, dest);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid destination path";
+      cb(new Error(message), config.storage.basePath);
     }
-    cb(null, dest);
   },
   filename: (_req, file, cb) => {
     cb(null, file.originalname);
@@ -73,8 +79,12 @@ router.post("/upload", upload.array("files"), async (req: Request, res: Response
     const hasSpace = await QuotaService.canUpload(user.id, user.username, totalNewSize);
     if (!hasSpace) {
       // If quota exceeded, we should ideally delete the just-uploaded files
-      files.forEach(f => {
-        try { fs.unlinkSync(f.path); } catch (e) {}
+      files.forEach((file) => {
+        try {
+          fs.unlinkSync(file.path);
+        } catch {
+          // Ignore cleanup failures after quota rejection.
+        }
       });
       return res.status(403).json({ success: false, error: "Quota Exceeded: You do not have enough space." });
     }
@@ -92,9 +102,10 @@ router.get("/download", (req: Request, res: Response) => {
   const filePath = req.query["path"] as string;
   if (!filePath) return res.status(400).json({ success: false, error: "Path is required" });
 
-  const absolutePath = path.join(config.storage.basePath, filePath);
-  
-  if (!absolutePath.startsWith(path.normalize(config.storage.basePath))) {
+  let absolutePath: string;
+  try {
+    absolutePath = resolveStoragePath(filePath);
+  } catch {
     return res.status(403).json({ success: false, error: "Access Denied" });
   }
 
