@@ -124,8 +124,8 @@ export const UpdateService = {
       logChunks.push(await runCommand("git reset --hard HEAD", "Descartando cambios locales antes de actualizar"));
       logChunks.push(await runCommand("git fetch origin main", "Descargando cambios"));
       logChunks.push(await runCommand("git pull origin main", "Aplicando cambios remotos"));
-      logChunks.push(await runCommand("npm install", "Dependencias backend"));
-      logChunks.push(await runCommand("npm --prefix frontend install", "Dependencias frontend"));
+      logChunks.push(await runCommand("npm install --include=dev", "Dependencias backend"));
+      logChunks.push(await runCommand("npm --prefix frontend install --include=dev", "Dependencias frontend"));
       logChunks.push(await runCommand("npm --prefix frontend run build", "Build frontend"));
       logChunks.push(await runCommand("npx prisma generate", "Prisma generate"));
       logChunks.push(await runCommand("npx prisma db push", "Prisma db push"));
