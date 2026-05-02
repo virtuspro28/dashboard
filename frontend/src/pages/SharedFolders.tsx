@@ -114,7 +114,7 @@ const SharedFolders: React.FC = () => {
 
   const toggleProtocol = async (protocol: 'smb' | 'nfs', current: boolean) => {
     try {
-      const res = await fetch('/api/samba/protocol/toggle', {
+      const res = await fetch('/api/samba/protocol/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -160,8 +160,8 @@ const SharedFolders: React.FC = () => {
               <p className="text-xs text-slate-500">Compatible con Windows, macOS y Android</p>
             </div>
           </div>
-          <button onClick={() => void toggleProtocol('smb', protocols.smb.enabled)}>
-            {protocols.smb.enabled ? <ToggleRight className="w-10 h-10 text-green-500" /> : <ToggleLeft className="w-10 h-10 text-slate-600" />}
+          <button onClick={() => void toggleProtocol('smb', protocols.smb.active)}>
+            {protocols.smb.active ? <ToggleRight className="w-10 h-10 text-green-500" /> : <ToggleLeft className="w-10 h-10 text-slate-600" />}
           </button>
         </div>
         <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 flex items-center justify-between">
@@ -174,8 +174,8 @@ const SharedFolders: React.FC = () => {
               <p className="text-xs text-slate-500">Alto rendimiento para servidores Linux</p>
             </div>
           </div>
-          <button onClick={() => void toggleProtocol('nfs', protocols.nfs.enabled)}>
-            {protocols.nfs.enabled ? <ToggleRight className="w-10 h-10 text-purple-500" /> : <ToggleLeft className="w-10 h-10 text-slate-600" />}
+          <button onClick={() => void toggleProtocol('nfs', protocols.nfs.active)}>
+            {protocols.nfs.active ? <ToggleRight className="w-10 h-10 text-purple-500" /> : <ToggleLeft className="w-10 h-10 text-slate-600" />}
           </button>
         </div>
       </div>

@@ -5,6 +5,14 @@ import { FitAddon } from '@xterm/addon-fit';
 import { io, type Socket } from 'socket.io-client';
 import 'xterm/css/xterm.css';
 
+function getTerminalSocketUrl(): string {
+  if (import.meta.env.DEV) {
+    return `${window.location.protocol}//${window.location.hostname}:3000/terminal`;
+  }
+
+  return '/terminal';
+}
+
 export default function TerminalPage() {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
@@ -35,9 +43,15 @@ export default function TerminalPage() {
 
     xtermRef.current = term;
 
-    // Conectar Socket.io
-    const socket = io('/terminal', {
+    // Conectar Socket.io — extraer JWT de cookie para auth explícita
+    const jwtMatch = document.cookie.match(/(?:^|;\s*)jwt=([^;]*)/);
+    const token = jwtMatch ? decodeURIComponent(jwtMatch[1]) : undefined;
+
+    const socket = io(getTerminalSocketUrl(), {
+      path: '/socket.io',
+      transports: ['websocket', 'polling'],
       withCredentials: true,
+      auth: token ? { token } : {},
     });
     socketRef.current = socket;
 

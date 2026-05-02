@@ -67,6 +67,22 @@ const FALLBACK_DDNS_PROVIDERS: DdnsProviderOption[] = [
   { id: 'custom', name: 'Manual / Custom URL' },
 ];
 
+async function parseJsonResponse<T>(res: Response, fallbackMessage: string): Promise<T> {
+  const contentType = res.headers.get('content-type') ?? '';
+
+  if (!contentType.includes('application/json')) {
+    const rawText = await res.text();
+    throw new Error(rawText ? `${fallbackMessage}: respuesta no JSON` : fallbackMessage);
+  }
+
+  const json = await res.json() as { success?: boolean; data?: T; error?: string };
+  if (!res.ok || !json.success) {
+    throw new Error(json.error || fallbackMessage);
+  }
+
+  return json.data as T;
+}
+
 export default function RemoteAccess() {
   const [status, setStatus] = useState<VpnStatus | null>(null);
   const [clients, setClients] = useState<VpnClient[]>([]);
@@ -101,31 +117,11 @@ export default function RemoteAccess() {
     setError(null);
     try {
       const [statusRes, clientsRes, domainsRes, ddnsRes, providersRes] = await Promise.allSettled([
-        fetch('/api/vpn/status', { credentials: 'include' }).then(async (res) => {
-          const json = await res.json();
-          if (!res.ok || !json.success) throw new Error(json.error || 'No se pudo leer WireGuard');
-          return json.data as VpnStatus;
-        }),
-        fetch('/api/vpn/clients', { credentials: 'include' }).then(async (res) => {
-          const json = await res.json();
-          if (!res.ok || !json.success) throw new Error(json.error || 'No se pudo leer los clientes VPN');
-          return json.data as VpnClient[];
-        }),
-        fetch('/api/proxy/domains', { credentials: 'include' }).then(async (res) => {
-          const json = await res.json();
-          if (!res.ok || !json.success) throw new Error(json.error || 'No se pudo leer los dominios proxy');
-          return json.data as ProxyDomain[];
-        }),
-        fetch('/api/vpn/ddns/profiles', { credentials: 'include' }).then(async (res) => {
-          const json = await res.json();
-          if (!res.ok || !json.success) throw new Error(json.error || 'No se pudo leer DDNS');
-          return json.data as DdnsProfile[];
-        }),
-        fetch('/api/vpn/ddns/providers', { credentials: 'include' }).then(async (res) => {
-          const json = await res.json();
-          if (!res.ok || !json.success) throw new Error(json.error || 'No se pudo leer proveedores DDNS');
-          return json.data as DdnsProviderOption[];
-        }),
+        fetch('/api/vpn/status', { credentials: 'include' }).then((res) => parseJsonResponse<VpnStatus>(res, 'No se pudo leer WireGuard')),
+        fetch('/api/vpn/clients', { credentials: 'include' }).then((res) => parseJsonResponse<VpnClient[]>(res, 'No se pudo leer los clientes VPN')),
+        fetch('/api/proxy/domains', { credentials: 'include' }).then((res) => parseJsonResponse<ProxyDomain[]>(res, 'No se pudo leer los dominios proxy')),
+        fetch('/api/vpn/ddns/profiles', { credentials: 'include' }).then((res) => parseJsonResponse<DdnsProfile[]>(res, 'No se pudo leer DDNS')),
+        fetch('/api/vpn/ddns/providers', { credentials: 'include' }).then((res) => parseJsonResponse<DdnsProviderOption[]>(res, 'No se pudo leer proveedores DDNS')),
       ]);
 
       const nextErrors: string[] = [];

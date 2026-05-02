@@ -25,6 +25,38 @@ export interface ProtocolStatus {
   enabled: boolean;
 }
 
+function getServiceName(protocol: "smb" | "nfs"): string {
+  return protocol === "smb" ? "smbd" : "nfs-kernel-server";
+}
+
+async function inspectService(protocol: "smb" | "nfs"): Promise<ProtocolStatus> {
+  if (appConfig.platform.isWindows) {
+    return protocol === "smb"
+      ? { protocol: "smb", active: true, enabled: true }
+      : { protocol: "nfs", active: false, enabled: false };
+  }
+
+  const serviceName = getServiceName(protocol);
+  let active = false;
+  let enabled = false;
+
+  try {
+    const { stdout } = await execAsync(`systemctl is-active ${serviceName}`);
+    active = stdout.trim() === "active";
+  } catch {
+    active = false;
+  }
+
+  try {
+    const { stdout } = await execAsync(`systemctl is-enabled ${serviceName}`);
+    enabled = stdout.trim() === "enabled";
+  } catch {
+    enabled = false;
+  }
+
+  return { protocol, active, enabled };
+}
+
 /**
  * Servicio para gestionar compartidos de Samba y NFS.
  */
@@ -37,31 +69,14 @@ export const SambaService = {
       ];
     }
 
-    const inspectService = async (protocol: "smb" | "nfs", serviceName: string): Promise<ProtocolStatus> => {
-      let active = false;
-      let enabled = false;
-
-      try {
-        const { stdout } = await execAsync(`systemctl is-active ${serviceName}`);
-        active = stdout.trim() === "active";
-      } catch {
-        active = false;
-      }
-
-      try {
-        const { stdout } = await execAsync(`systemctl is-enabled ${serviceName}`);
-        enabled = stdout.trim() === "enabled";
-      } catch {
-        enabled = false;
-      }
-
-      return { protocol, active, enabled };
-    };
-
     return Promise.all([
-      inspectService("smb", "smbd"),
-      inspectService("nfs", "nfs-kernel-server"),
+      inspectService("smb"),
+      inspectService("nfs"),
     ]);
+  },
+
+  async getProtocolStatusByName(protocol: "smb" | "nfs"): Promise<ProtocolStatus> {
+    return inspectService(protocol);
   },
 
   /**
@@ -195,13 +210,13 @@ export const SambaService = {
    * Activa/Desactiva protocolos.
    */
   async toggleProtocol(protocol: 'smb' | 'nfs', enabled: boolean): Promise<void> {
-    const service = protocol === 'smb' ? 'smbd' : 'nfs-kernel-server';
+    const service = getServiceName(protocol);
     const action = enabled ? 'start' : 'stop';
     const enableDisable = enabled ? 'enable' : 'disable';
 
     try {
-      await execAsync(`sudo systemctl ${action} ${service}`);
-      await execAsync(`sudo systemctl ${enableDisable} ${service}`);
+      await execAsync(`systemctl ${action} ${service}`);
+      await execAsync(`systemctl ${enableDisable} ${service}`);
       log.info(`Protocol ${protocol} ${enabled ? 'enabled' : 'disabled'}`);
     } catch (error: unknown) {
       const errData = error instanceof Error ? { error: error.message } : { error: String(error) };

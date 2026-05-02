@@ -17,6 +17,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 const FILES_LIST_ENDPOINT = '/api/files/list';
+const FILE_MANAGER_PATH_KEY = 'homevault:file-manager:path';
 
 interface FileItem {
   name: string;
@@ -55,8 +56,13 @@ export default function FileManager() {
   }, []);
 
   useEffect(() => {
-    void fetchFiles('/');
+    const savedPath = window.localStorage.getItem(FILE_MANAGER_PATH_KEY) || '/';
+    void fetchFiles(savedPath);
   }, [fetchFiles]);
+
+  useEffect(() => {
+    window.localStorage.setItem(FILE_MANAGER_PATH_KEY, currentPath || '/');
+  }, [currentPath]);
 
   const handleNavigate = (path: string) => {
     void fetchFiles(path);

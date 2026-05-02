@@ -87,9 +87,9 @@ const app = express();
 const httpServer = createServer(app);
 export const io = new SocketServer(httpServer, {
   cors: {
-    origin: "*", // En producción deberíamos restringir esto
-    credentials: true
-  }
+    origin: true,
+    credentials: true,
+  },
 });
 
 /**

@@ -4,6 +4,10 @@ import { SambaService } from '../services/samba.service.js';
 
 const router = Router();
 
+function getMsg(e: unknown): string {
+  return e instanceof Error ? e.message : "Error desconocido";
+}
+
 // Todas las rutas de Samba requieren autenticación
 router.use(requireAuth);
 
@@ -15,8 +19,8 @@ router.get('/shares', async (req, res) => {
   try {
     const shares = await SambaService.listShares();
     res.json({ success: true, data: shares });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -24,8 +28,34 @@ router.get('/protocol/status', async (_req, res) => {
   try {
     const status = await SambaService.getProtocolStatus();
     res.json({ success: true, data: status });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
+  }
+});
+
+router.post('/protocol/status', requireAdmin, async (req, res) => {
+  try {
+    const { protocol, enabled } = req.body as { protocol?: 'smb' | 'nfs'; enabled?: boolean };
+
+    if (protocol !== 'smb' && protocol !== 'nfs') {
+      res.status(400).json({ success: false, error: 'Protocolo requerido' });
+      return;
+    }
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ success: false, error: 'Estado requerido' });
+      return;
+    }
+
+    await SambaService.toggleProtocol(protocol, enabled);
+    const status = await SambaService.getProtocolStatusByName(protocol);
+    res.json({
+      success: true,
+      data: status,
+      message: `${protocol.toUpperCase()} ${enabled ? 'activado' : 'desactivado'} correctamente`,
+    });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -41,8 +71,8 @@ router.post('/shares', requireAdmin, async (req, res) => {
     }
     await SambaService.addShare({ name, path, readOnly });
     res.json({ success: true, message: 'Recurso compartido Samba añadido correctamente' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -58,8 +88,8 @@ router.post('/shares/nfs', requireAdmin, async (req, res) => {
     }
     await SambaService.addNFSShare(path);
     res.json({ success: true, message: 'Recurso compartido NFS añadido correctamente' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -69,13 +99,27 @@ router.post('/shares/nfs', requireAdmin, async (req, res) => {
  */
 router.post('/protocol/toggle', requireAdmin, async (req, res) => {
   try {
-    const { protocol, enabled } = req.body;
-    if (!protocol) return res.status(400).json({ success: false, error: 'Protocolo requerido' });
-    
+    const { protocol, enabled } = req.body as { protocol?: 'smb' | 'nfs'; enabled?: boolean };
+
+    if (protocol !== 'smb' && protocol !== 'nfs') {
+      res.status(400).json({ success: false, error: 'Protocolo requerido' });
+      return;
+    }
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ success: false, error: 'Estado requerido' });
+      return;
+    }
+
     await SambaService.toggleProtocol(protocol, enabled);
-    res.json({ success: true, message: `${protocol.toUpperCase()} ${enabled ? 'activado' : 'desactivado'} correctamente` });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    const status = await SambaService.getProtocolStatusByName(protocol);
+    res.json({
+      success: true,
+      data: status,
+      message: `${protocol.toUpperCase()} ${enabled ? 'activado' : 'desactivado'} correctamente`,
+    });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 
@@ -88,8 +132,8 @@ router.delete('/shares/:name', requireAdmin, async (req, res) => {
     const name = req.params["name"] as string;
     await SambaService.deleteShare(name);
     res.json({ success: true, message: 'Recurso compartido eliminado correctamente' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
   }
 });
 

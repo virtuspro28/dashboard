@@ -13,6 +13,25 @@ import {
   Pencil,
   Trash2,
   Server,
+  Shield,
+  ShieldCheck,
+  Play,
+  Tv,
+  Download,
+  Radio,
+  Image,
+  Film,
+  Home,
+  Workflow,
+  Lock,
+  Boxes,
+  BarChart3,
+  GitBranch,
+  FileText,
+  RefreshCw,
+  Cloud,
+  Music,
+  type LucideIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '../lib/errors';
@@ -81,20 +100,59 @@ const EMPTY_PORT: PortMapping = { host: '', container: '', protocol: 'tcp', labe
 const EMPTY_VOLUME: VolumeMapping = { host: '', container: '/config', label: 'Config' };
 const EMPTY_ENV: EnvVar = { key: 'TZ', value: 'Europe/Madrid', label: 'Timezone' };
 
-function AppIcon({ app }: { app: StoreApp }) {
-  const icon = app.icon ?? '';
+const LUCIDE_ICON_MAP: Record<string, LucideIcon> = {
+  Shield,
+  ShieldCheck,
+  Play,
+  Tv,
+  Download,
+  Radio,
+  Image,
+  Film,
+  Home,
+  Workflow,
+  Lock,
+  Boxes,
+  BarChart3,
+  Database,
+  GitBranch,
+  FileText,
+  Globe,
+  RefreshCw,
+  Cloud,
+  Search,
+  Music,
+  Package,
+  Server,
+  Cpu,
+};
 
-  if (icon.startsWith('http://') || icon.startsWith('https://')) {
+function AppIcon({ app }: { app: StoreApp }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const icon = app.icon ?? '';
+  const normalizedIcon = icon.startsWith('assets/') ? `/${icon}` : icon;
+  const isImageIcon =
+    normalizedIcon.startsWith('http://') ||
+    normalizedIcon.startsWith('https://') ||
+    normalizedIcon.startsWith('/assets/') ||
+    normalizedIcon.startsWith('data:image/');
+
+  if (isImageIcon && !imageFailed) {
     return (
       <img
-        src={icon}
+        src={normalizedIcon}
         alt={app.name ?? 'App icon'}
         className="w-8 h-8 rounded-xl object-cover"
-        onError={(event) => {
-          event.currentTarget.style.display = 'none';
+        onError={() => {
+          setImageFailed(true);
         }}
       />
     );
+  }
+
+  const IconComponent = LUCIDE_ICON_MAP[normalizedIcon];
+  if (IconComponent) {
+    return <IconComponent className="w-6 h-6 text-blue-400" />;
   }
 
   return <Database className="w-6 h-6 text-blue-400" />;
