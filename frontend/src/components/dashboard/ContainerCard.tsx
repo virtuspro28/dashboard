@@ -90,7 +90,7 @@ export default function ContainerCard({
           </div>
         </div>
 
-        <div className={showExtendedActions ? 'grid grid-cols-3 gap-3 sm:grid-cols-5' : 'flex space-x-3'}>
+        <div className={showExtendedActions ? 'grid grid-cols-5 gap-3' : 'flex space-x-3'}>
           {isRunning ? (
             <button
               onClick={() => onStop?.(container.id)}
@@ -113,34 +113,6 @@ export default function ContainerCard({
             </button>
           )}
 
-          {webUiUrl && (
-            <a
-              href={canOpenWebUi ? webUiUrl : undefined}
-              target="_blank"
-              rel="noreferrer"
-              title="Abrir Interfaz Web"
-              aria-label="Abrir Interfaz Web"
-              onClick={(event) => {
-                if (!canOpenWebUi) {
-                  event.preventDefault();
-                }
-              }}
-              className={showExtendedActions
-                ? `flex items-center justify-center py-2.5 rounded-xl border font-medium transition-colors ${
-                  canOpenWebUi
-                    ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/30'
-                    : 'bg-white/5 text-slate-500 border-white/10 opacity-50 cursor-not-allowed'
-                }`
-                : `flex items-center justify-center px-4 py-2.5 rounded-xl border font-medium transition-colors ${
-                  canOpenWebUi
-                    ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/30'
-                    : 'bg-white/5 text-slate-500 border-white/10 opacity-50 cursor-not-allowed'
-                }`}
-            >
-              {showExtendedActions ? <ExternalLink className="w-4 h-4" /> : <><ExternalLink className="w-4 h-4 mr-2" /> Abrir</>}
-            </a>
-          )}
-
           {showExtendedActions && (
             <>
               <button
@@ -155,6 +127,23 @@ export default function ContainerCard({
                 className="flex items-center justify-center py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl font-medium transition-colors"
               >
                 <Terminal className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => {
+                  if (webUiUrl) {
+                    window.open(webUiUrl, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                disabled={!canOpenWebUi}
+                className={`flex items-center justify-center py-2.5 rounded-xl border font-medium transition-colors ${
+                  canOpenWebUi
+                    ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border-blue-500/20'
+                    : 'bg-gray-500/10 text-gray-500 border-white/10 cursor-not-allowed opacity-50'
+                }`}
+                title="Abrir Interfaz Web"
+                aria-label="Abrir Interfaz Web"
+              >
+                <ExternalLink className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setConfirmingDelete(true)}
