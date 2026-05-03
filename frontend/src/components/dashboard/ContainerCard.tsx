@@ -14,7 +14,7 @@ interface ContainerCardProps {
   showExtendedActions?: boolean;
 }
 
-function resolveContainerWebUiUrl(container: ContainerInfo): string | null {
+function resolveContainerWebUiUrl(container: ContainerInfo): string {
   const hostname = window.location.hostname;
 
   if (container.webUi) {
@@ -23,7 +23,7 @@ function resolveContainerWebUiUrl(container: ContainerInfo): string | null {
 
   const firstPublicTcpPort = container.publishedPorts.find((port) => port.protocol === 'tcp');
   if (!firstPublicTcpPort) {
-    return null;
+    return `http://${hostname}`;
   }
 
   return `http://${hostname}:${firstPublicTcpPort.hostPort}`;
@@ -44,8 +44,6 @@ export default function ContainerCard({
   const [deleteData, setDeleteData] = useState(false);
   const [iconFailed, setIconFailed] = useState(false);
   const appIcon = resolveAppIconAsset(container.name, container.image);
-  const webUiUrl = resolveContainerWebUiUrl(container);
-  const canOpenWebUi = isRunning && webUiUrl !== null;
 
   return (
     <>
@@ -90,7 +88,7 @@ export default function ContainerCard({
           </div>
         </div>
 
-        <div className={showExtendedActions ? 'grid grid-cols-5 gap-3' : 'flex space-x-3'}>
+        <div className={showExtendedActions ? 'grid grid-cols-5 gap-2 w-full' : 'flex space-x-3'}>
           {isRunning ? (
             <button
               onClick={() => onStop?.(container.id)}
@@ -128,22 +126,22 @@ export default function ContainerCard({
               >
                 <Terminal className="w-4 h-4" />
               </button>
+              {/* BOTÓN WEB UI - INYECCIÓN FORZOSA */}
               <button
-                onClick={() => {
-                  if (webUiUrl) {
-                    window.open(webUiUrl, '_blank', 'noopener,noreferrer');
-                  }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const url = resolveContainerWebUiUrl(container);
+                  window.open(url, '_blank');
                 }}
-                disabled={!canOpenWebUi}
-                className={`flex items-center justify-center py-2.5 rounded-xl border font-medium transition-colors ${
-                  canOpenWebUi
-                    ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border-blue-500/20'
-                    : 'bg-gray-500/10 text-gray-500 border-white/10 cursor-not-allowed opacity-50'
+                disabled={container.state !== 'running'}
+                className={`flex items-center justify-center p-2 rounded-lg transition-all duration-200 ${
+                  container.state === 'running'
+                    ? 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/40 border border-indigo-500/30'
+                    : 'bg-gray-500/10 text-gray-500 cursor-not-allowed border border-transparent'
                 }`}
                 title="Abrir Interfaz Web"
-                aria-label="Abrir Interfaz Web"
               >
-                <ExternalLink className="w-4 h-4" />
+                <ExternalLink size={18} />
               </button>
               <button
                 onClick={() => setConfirmingDelete(true)}
