@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { logger } from "../utils/logger.js";
 import { config } from "../config/index.js";
+import { appInventory, type AppDefaultConfig, type AppInventoryItem } from "../data/appInventory.js";
 
 const execAsync = promisify(exec);
 const log = logger.child("docker-service");
@@ -14,6 +15,19 @@ export interface DockerContainer {
   image: string;
   state: string;
   status: string;
+  publishedPorts: DockerPublishedPort[];
+  webUi: DockerWebUi | null;
+}
+
+export interface DockerWebUi {
+  port: number;
+  path: string;
+}
+
+export interface DockerPublishedPort {
+  containerPort: number;
+  hostPort: number;
+  protocol: string;
 }
 
 export interface DockerContainerDetails {
@@ -68,6 +82,138 @@ function resolveAppDataPath(details: DockerContainerDetails): string | null {
   return null;
 }
 
+function normalizeKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^\//, "")
+    .replace(/[_\s]+/g, "-");
+}
+
+function normalizeImageReference(value: string): string {
+  const withoutTag = value.trim().toLowerCase().split("@")[0]?.split(":")[0] ?? "";
+  return withoutTag.replace(/^docker\.io\//, "");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parsePublishedPorts(value: string): DockerPublishedPort[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .flatMap((entry) => {
+      if (!entry) {
+        return [];
+      }
+
+      if (entry.includes("->")) {
+        const mappedMatch = entry.match(/(?:(?:.*:))?(\d+)->(\d+)\/([a-z0-9]+)/i);
+        if (!mappedMatch) {
+          return [];
+        }
+
+        const hostPort = Number(mappedMatch[1]);
+        const containerPort = Number(mappedMatch[2]);
+        const protocol = mappedMatch[3]?.toLowerCase() ?? "tcp";
+        if (!Number.isFinite(hostPort) || !Number.isFinite(containerPort)) {
+          return [];
+        }
+
+        return [{ hostPort, containerPort, protocol }];
+      }
+
+      const exposedMatch = entry.match(/^(\d+)\/([a-z0-9]+)$/i);
+      if (!exposedMatch) {
+        return [];
+      }
+
+      const containerPort = Number(exposedMatch[1]);
+      const protocol = exposedMatch[2]?.toLowerCase() ?? "tcp";
+      if (!Number.isFinite(containerPort)) {
+        return [];
+      }
+
+      return [{ hostPort: containerPort, containerPort, protocol }];
+    });
+}
+
+function getUiPortPriority(label: string | undefined): number {
+  const normalizedLabel = label?.trim().toLowerCase() ?? "";
+  if (normalizedLabel.includes("admin ui") || normalizedLabel.includes("panel web")) {
+    return 4;
+  }
+  if (normalizedLabel.includes("web ui")) {
+    return 3;
+  }
+  if (normalizedLabel.includes("api / ui")) {
+    return 2;
+  }
+  if (normalizedLabel.includes("setup ui")) {
+    return 1;
+  }
+  return 0;
+}
+
+function findMatchingApp(container: Pick<DockerContainer, "name" | "image">): AppInventoryItem | null {
+  const normalizedContainerName = normalizeKey(container.name);
+  const normalizedImage = normalizeImageReference(container.image);
+
+  return appInventory.find((app) => {
+    const appId = normalizeKey(app.id);
+    const appName = normalizeKey(app.name);
+    const appImage = normalizeImageReference(app.image ?? "");
+    return normalizedContainerName === appId
+      || normalizedContainerName === appName
+      || normalizedImage === appImage;
+  }) ?? null;
+}
+
+function resolveContainerWebUi(
+  container: Pick<DockerContainer, "name" | "image">,
+  publishedPortsText: string,
+): DockerWebUi | null {
+  const publishedPorts = parsePublishedPorts(publishedPortsText).filter((port) => port.protocol === "tcp");
+  const matchedApp = findMatchingApp(container);
+
+  if (matchedApp) {
+    const preferredPort = [...matchedApp.defaultConfig.ports]
+      .sort((left, right) => getUiPortPriority(right.label) - getUiPortPriority(left.label))
+      .find((port) => getUiPortPriority(port.label) > 0);
+
+    if (preferredPort) {
+      const containerPort = Number(preferredPort.container);
+      if (Number.isFinite(containerPort)) {
+        const mappedPort = publishedPorts.find((port) => port.containerPort === containerPort);
+        if (mappedPort) {
+          return {
+            port: mappedPort.hostPort,
+            path: matchedApp.defaultConfig.webPath ?? "/",
+          };
+        }
+
+        if (matchedApp.defaultConfig.networkMode === "host") {
+          return {
+            port: containerPort,
+            path: matchedApp.defaultConfig.webPath ?? "/",
+          };
+        }
+      }
+    }
+  }
+
+  const fallbackPort = publishedPorts[0];
+  if (!fallbackPort) {
+    return null;
+  }
+
+  return {
+    port: fallbackPort.hostPort,
+    path: "/",
+  };
+}
+
 function buildDockerError(error: any): Error {
   const message = error?.stderr || error?.message || "Error de Docker desconocido.";
   if (message.includes("permission denied") || message.includes("acceso denegado")) {
@@ -81,10 +227,10 @@ function buildDockerError(error: any): Error {
 
 function getMockContainers(): DockerContainer[] {
   return [
-    { id: "e1234567890f", name: "Plex-Media-Server", image: "plexinc/pms:latest", state: "running", status: "Up 4 days" },
-    { id: "a9876543210b", name: "Pi-hole", image: "pihole/pihole:latest", state: "running", status: "Up 2 weeks" },
-    { id: "c5555555555d", name: "Home-Assistant", image: "homeassistant/home-assistant:latest", state: "running", status: "Up 2 hours" },
-    { id: "f1111111111a", name: "Nextcloud-DB", image: "mariadb:10.5", state: "exited", status: "Exited (0) 5 days ago" },
+    { id: "e1234567890f", name: "plex", image: "plexinc/pms-docker:latest", state: "running", status: "Up 4 days", publishedPorts: [{ hostPort: 32400, containerPort: 32400, protocol: "tcp" }], webUi: { port: 32400, path: "/" } },
+    { id: "a9876543210b", name: "pihole", image: "pihole/pihole:latest", state: "running", status: "Up 2 weeks", publishedPorts: [{ hostPort: 8081, containerPort: 80, protocol: "tcp" }], webUi: { port: 8081, path: "/admin" } },
+    { id: "c5555555555d", name: "home-assistant", image: "ghcr.io/home-assistant/home-assistant:stable", state: "running", status: "Up 2 hours", publishedPorts: [{ hostPort: 8123, containerPort: 8123, protocol: "tcp" }], webUi: { port: 8123, path: "/" } },
+    { id: "f1111111111a", name: "nextcloud-db", image: "mariadb:10.5", state: "exited", status: "Exited (0) 5 days ago", publishedPorts: [], webUi: null },
   ];
 }
 
@@ -103,15 +249,25 @@ export async function getContainers(): Promise<DockerContainer[]> {
       .split("\n")
       .filter((line) => line.trim().length > 0)
       .map((line) => {
-        const raw = JSON.parse(line);
+        const raw: unknown = JSON.parse(line);
+        if (!isRecord(raw)) {
+          return null;
+        }
+
+        const name = typeof raw["Names"] === "string" ? raw["Names"] : typeof raw["name"] === "string" ? raw["name"] : "";
+        const image = typeof raw["Image"] === "string" ? raw["Image"] : typeof raw["image"] === "string" ? raw["image"] : "";
+        const ports = typeof raw["Ports"] === "string" ? raw["Ports"] : typeof raw["ports"] === "string" ? raw["ports"] : "";
         return {
-          id: raw.ID || raw.id,
-          name: raw.Names || raw.name,
-          image: raw.Image || raw.image,
-          state: (raw.State || raw.state || "exited").toLowerCase(),
-          status: raw.Status || raw.status,
+          id: typeof raw["ID"] === "string" ? raw["ID"] : typeof raw["id"] === "string" ? raw["id"] : "",
+          name,
+          image,
+          state: String(raw["State"] ?? raw["state"] ?? "exited").toLowerCase(),
+          status: String(raw["Status"] ?? raw["status"] ?? ""),
+          publishedPorts: parsePublishedPorts(ports),
+          webUi: resolveContainerWebUi({ name, image }, ports),
         };
-      });
+      })
+      .filter((container): container is DockerContainer => container !== null && container.id.length > 0);
   } catch (error: any) {
     log.errorWithStack("Error ejecutando CLI de Docker", error);
     throw buildDockerError(error);
@@ -248,18 +404,37 @@ export async function getContainerDetails(id: string): Promise<DockerContainerDe
       container,
       command: Array.isArray(raw.Config?.Cmd) ? raw.Config.Cmd.join(" ") : raw.Path || "",
       createdAt: raw.Created ?? null,
-      mounts: (raw.Mounts ?? []).map((mount: any) => ({
-        source: mount.Source ?? "",
-        destination: mount.Destination ?? "",
-        mode: mount.Mode ?? "",
-      })),
-      ports: Object.entries(raw.NetworkSettings?.Ports ?? {}).flatMap(([containerPort, bindings]) => {
+      mounts: (Array.isArray(raw.Mounts) ? raw.Mounts : []).map((mount: unknown) => {
+        if (!isRecord(mount)) {
+          return {
+            source: "",
+            destination: "",
+            mode: "",
+          };
+        }
+
+        return {
+          source: typeof mount["Source"] === "string" ? mount["Source"] : "",
+          destination: typeof mount["Destination"] === "string" ? mount["Destination"] : "",
+          mode: typeof mount["Mode"] === "string" ? mount["Mode"] : "",
+        };
+      }),
+      ports: Object.entries(isRecord(raw.NetworkSettings) && isRecord(raw.NetworkSettings["Ports"]) ? raw.NetworkSettings["Ports"] : {}).flatMap(([containerPort, bindings]) => {
         if (!Array.isArray(bindings) || bindings.length === 0) {
           return [containerPort];
         }
-        return bindings.map((binding: any) => `${binding.HostPort}->${containerPort}`);
+        return bindings.map((binding: unknown) => {
+          if (!isRecord(binding)) {
+            return containerPort;
+          }
+
+          const hostPort = typeof binding["HostPort"] === "string" ? binding["HostPort"] : "";
+          return hostPort ? `${hostPort}->${containerPort}` : containerPort;
+        });
       }),
-      restartPolicy: raw.HostConfig?.RestartPolicy?.Name || "no",
+      restartPolicy: isRecord(raw.HostConfig) && isRecord(raw.HostConfig["RestartPolicy"]) && typeof raw.HostConfig["RestartPolicy"]["Name"] === "string"
+        ? raw.HostConfig["RestartPolicy"]["Name"]
+        : "no",
     };
   } catch (error: any) {
     log.errorWithStack(`Error inspeccionando el contenedor ${id}`, error);

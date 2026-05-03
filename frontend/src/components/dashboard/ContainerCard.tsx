@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Square, Loader2, Box, RotateCcw, Terminal, Trash2, AlertTriangle } from 'lucide-react';
+import { Play, Square, Loader2, Box, RotateCcw, Terminal, Trash2, AlertTriangle, ExternalLink } from 'lucide-react';
 import type { ContainerInfo } from '../../types/docker';
 import { resolveAppIconAsset } from '../../lib/appIcons';
 
@@ -12,6 +12,21 @@ interface ContainerCardProps {
   onDelete?: (id: string, options: { deleteData: boolean }) => void;
   onDetails?: (id: string) => void;
   showExtendedActions?: boolean;
+}
+
+function resolveContainerWebUiUrl(container: ContainerInfo): string | null {
+  const hostname = window.location.hostname;
+
+  if (container.webUi) {
+    return `http://${hostname}:${container.webUi.port}${container.webUi.path}`;
+  }
+
+  const firstPublicTcpPort = container.publishedPorts.find((port) => port.protocol === 'tcp');
+  if (!firstPublicTcpPort) {
+    return null;
+  }
+
+  return `http://${hostname}:${firstPublicTcpPort.hostPort}`;
 }
 
 export default function ContainerCard({
@@ -29,6 +44,8 @@ export default function ContainerCard({
   const [deleteData, setDeleteData] = useState(false);
   const [iconFailed, setIconFailed] = useState(false);
   const appIcon = resolveAppIconAsset(container.name, container.image);
+  const webUiUrl = resolveContainerWebUiUrl(container);
+  const canOpenWebUi = isRunning && webUiUrl !== null;
 
   return (
     <>
@@ -73,7 +90,7 @@ export default function ContainerCard({
           </div>
         </div>
 
-        <div className={showExtendedActions ? 'grid grid-cols-4 gap-3' : 'flex space-x-3'}>
+        <div className={showExtendedActions ? 'grid grid-cols-3 gap-3 sm:grid-cols-5' : 'flex space-x-3'}>
           {isRunning ? (
             <button
               onClick={() => onStop?.(container.id)}
@@ -94,6 +111,34 @@ export default function ContainerCard({
             >
               {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : showExtendedActions ? <Play className="w-4 h-4" /> : <><Play className="w-4 h-4 mr-2" /> Iniciar</>}
             </button>
+          )}
+
+          {webUiUrl && (
+            <a
+              href={canOpenWebUi ? webUiUrl : undefined}
+              target="_blank"
+              rel="noreferrer"
+              title="Abrir Interfaz Web"
+              aria-label="Abrir Interfaz Web"
+              onClick={(event) => {
+                if (!canOpenWebUi) {
+                  event.preventDefault();
+                }
+              }}
+              className={showExtendedActions
+                ? `flex items-center justify-center py-2.5 rounded-xl border font-medium transition-colors ${
+                  canOpenWebUi
+                    ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/30'
+                    : 'bg-white/5 text-slate-500 border-white/10 opacity-50 cursor-not-allowed'
+                }`
+                : `flex items-center justify-center px-4 py-2.5 rounded-xl border font-medium transition-colors ${
+                  canOpenWebUi
+                    ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/30'
+                    : 'bg-white/5 text-slate-500 border-white/10 opacity-50 cursor-not-allowed'
+                }`}
+            >
+              {showExtendedActions ? <ExternalLink className="w-4 h-4" /> : <><ExternalLink className="w-4 h-4 mr-2" /> Abrir</>}
+            </a>
           )}
 
           {showExtendedActions && (

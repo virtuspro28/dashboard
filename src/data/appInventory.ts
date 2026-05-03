@@ -21,6 +21,7 @@ export interface AppDefaultConfig {
   ports: AppPortMapping[];
   volumes: AppVolumeMapping[];
   env: AppEnvVar[];
+  webPath?: string | undefined;
   networkMode?: string | undefined;
   privileged?: boolean | undefined;
   capAdd?: string[] | undefined;
@@ -131,6 +132,7 @@ export const appInventory: AppInventoryItem[] = [
         envVar("FTLCONF_webserver_api_password", "", "Password panel web"),
         envVar("DNSMASQ_LISTENING", "all", "Escucha DNS"),
       ],
+      webPath: "/admin",
       capAdd: ["NET_ADMIN"],
     },
   }),
