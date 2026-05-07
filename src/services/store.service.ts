@@ -250,7 +250,125 @@ function mergeInstallConfig(app: AppInventoryItem, payload?: InstallAppPayload):
   return nextApp;
 }
 
+function getEnvValue(app: AppInventoryItem, key: string, fallback = ""): string {
+  return app.env.find((item) => item.key === key)?.value ?? fallback;
+}
+
+function getImmichPostgresVolumePath(): string {
+  return "/opt/homevault/data/apps/immich/postgres";
+}
+
+function getVolumePathsForApp(app: AppInventoryItem): string[] {
+  const paths = app.volumes.map((volume) => volume.host);
+  if (app.id === "immich") {
+    paths.push(getImmichPostgresVolumePath());
+  }
+  return paths;
+}
+
+function buildImmichComposeContent(app: AppInventoryItem): string {
+  const dbUsername = getEnvValue(app, "DB_USERNAME", "immich");
+  const dbPassword = getEnvValue(app, "DB_PASSWORD", "immich");
+  const dbName = getEnvValue(app, "DB_DATABASE_NAME", "immich");
+  const timezone = getEnvValue(app, "TZ", "Europe/Madrid");
+
+  const lines: string[] = [
+    "services:",
+    "  immich:",
+    `    image: ${app.image}`,
+    `    container_name: ${app.id}`,
+    "    restart: unless-stopped",
+    "    depends_on:",
+    "      - immich-database",
+    "      - immich-redis",
+  ];
+
+  if (app.ports.length > 0) {
+    lines.push("    ports:");
+    for (const port of app.ports) {
+      const suffix = port.protocol && port.protocol !== "tcp" ? `/${port.protocol}` : "";
+      lines.push(`      - "${port.host}:${port.container}${suffix}"`);
+    }
+  }
+
+  if (app.volumes.length > 0) {
+    lines.push("    volumes:");
+    for (const volume of app.volumes) {
+      lines.push(`      - ${volume.host.replace(/\\/g, "/")}:${volume.container}`);
+    }
+  }
+
+  lines.push(
+    "    environment:",
+    `      TZ: "${timezone.replace(/"/g, '\\"')}"`,
+    '      DB_HOSTNAME: "immich-database"',
+    `      DB_USERNAME: "${dbUsername.replace(/"/g, '\\"')}"`,
+    `      DB_PASSWORD: "${dbPassword.replace(/"/g, '\\"')}"`,
+    `      DB_DATABASE_NAME: "${dbName.replace(/"/g, '\\"')}"`,
+    '      REDIS_HOSTNAME: "immich-redis"',
+    "  immich-database:",
+    "    image: tensorchord/pgvecto-rs:pg14-v0.2.0",
+    "    container_name: immich-database",
+    "    restart: unless-stopped",
+    "    environment:",
+    `      POSTGRES_USER: "${dbUsername.replace(/"/g, '\\"')}"`,
+    `      POSTGRES_PASSWORD: "${dbPassword.replace(/"/g, '\\"')}"`,
+    `      POSTGRES_DB: "${dbName.replace(/"/g, '\\"')}"`,
+    "    volumes:",
+    `      - ${getImmichPostgresVolumePath()}:/var/lib/postgresql/data`,
+    "  immich-redis:",
+    "    image: redis:7-alpine",
+    "    container_name: immich-redis",
+    "    restart: unless-stopped",
+  );
+
+  return lines.join("\n");
+}
+
+function buildGrafanaComposeContent(app: AppInventoryItem): string {
+  const lines: string[] = [
+    "services:",
+    `  ${app.id}:`,
+    `    image: ${app.image}`,
+    `    container_name: ${app.id}`,
+    "    restart: unless-stopped",
+    '    user: "0:0"',
+  ];
+
+  if (app.ports.length > 0) {
+    lines.push("    ports:");
+    for (const port of app.ports) {
+      const suffix = port.protocol && port.protocol !== "tcp" ? `/${port.protocol}` : "";
+      lines.push(`      - "${port.host}:${port.container}${suffix}"`);
+    }
+  }
+
+  if (app.volumes.length > 0) {
+    lines.push("    volumes:");
+    for (const volume of app.volumes) {
+      lines.push(`      - ${volume.host.replace(/\\/g, "/")}:${volume.container}`);
+    }
+  }
+
+  if (app.env.length > 0) {
+    lines.push("    environment:");
+    for (const item of app.env) {
+      lines.push(`      ${item.key}: "${item.value.replace(/"/g, '\\"')}"`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 function buildComposeContent(app: AppInventoryItem): string {
+  if (app.id === "immich") {
+    return buildImmichComposeContent(app);
+  }
+
+  if (app.id === "grafana") {
+    return buildGrafanaComposeContent(app);
+  }
+
   const lines: string[] = [
     "services:",
     `  ${app.id}:`,
@@ -299,10 +417,10 @@ function buildComposeContent(app: AppInventoryItem): string {
   return lines.join("\n");
 }
 
-async function ensureVolumeDirectories(volumes: AppVolumeMapping[]): Promise<void> {
-  for (const volume of volumes) {
-    if (!volume.host.startsWith("/etc/") && !path.extname(volume.host)) {
-      await fs.mkdir(volume.host, { recursive: true });
+async function ensureVolumeDirectories(paths: string[]): Promise<void> {
+  for (const hostPath of paths) {
+    if (!hostPath.startsWith("/etc/") && !path.extname(hostPath)) {
+      await fs.mkdir(hostPath, { recursive: true });
     }
   }
 }
@@ -383,7 +501,7 @@ export const StoreService = {
     const manifestDir = path.join(STORE_MANIFEST_DIR, app.id);
     const manifestPath = path.join(manifestDir, "docker-compose.yml");
 
-    await ensureVolumeDirectories(app.volumes);
+    await ensureVolumeDirectories(getVolumePathsForApp(app));
     await fs.mkdir(manifestDir, { recursive: true });
 
     const composeContent = buildComposeContent(app);
