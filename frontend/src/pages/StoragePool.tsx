@@ -22,6 +22,8 @@ interface PoolStatus {
   status: string;
   progress: number;
   lastSync?: string | null;
+  lastScrub?: string | null;
+  updatedAt?: string;
 }
 
 export default function StoragePool() {
@@ -30,6 +32,7 @@ export default function StoragePool() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [activeAction, setActiveAction] = useState<'sync' | 'scrub' | 'save' | null>(null);
   const [form, setForm] = useState({
     disks: '/mnt/disk1\n/mnt/disk2',
     parityDisk: '/mnt/parity1',
@@ -59,12 +62,25 @@ export default function StoragePool() {
   };
 
   useEffect(() => {
-    loadStorage();
+    void loadStorage();
   }, []);
+
+  useEffect(() => {
+    if (!poolStatus || (poolStatus.status !== 'syncing' && poolStatus.status !== 'scrubbing')) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void loadStorage();
+    }, 3000);
+
+    return () => window.clearInterval(interval);
+  }, [poolStatus?.status]);
 
   const createPool = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
+    setActiveAction('save');
     setError(null);
     try {
       const res = await fetch('/api/storage/pool/create', {
@@ -84,11 +100,13 @@ export default function StoragePool() {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setSaving(false);
+      setActiveAction(null);
     }
   };
 
   const syncPool = async () => {
     setSaving(true);
+    setActiveAction('sync');
     setError(null);
     try {
       const res = await fetch('/api/storage/pool/sync', { method: 'POST', credentials: 'include' });
@@ -99,6 +117,24 @@ export default function StoragePool() {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setSaving(false);
+      setActiveAction(null);
+    }
+  };
+
+  const scrubPool = async () => {
+    setSaving(true);
+    setActiveAction('scrub');
+    setError(null);
+    try {
+      const res = await fetch('/api/storage/pool/scrub', { method: 'POST', credentials: 'include' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'No se pudo lanzar el scrub');
+      await loadStorage();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido');
+    } finally {
+      setSaving(false);
+      setActiveAction(null);
     }
   };
 
@@ -124,17 +160,24 @@ export default function StoragePool() {
         </div>
         <div className="flex flex-wrap gap-3">
           <button
-            onClick={loadStorage}
+            onClick={() => void loadStorage()}
             className="px-5 py-3 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-white/10"
           >
             Refrescar
           </button>
           <button
-            onClick={syncPool}
+            onClick={() => void syncPool()}
             disabled={saving}
             className="px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all disabled:opacity-60"
           >
-            {saving ? 'Trabajando...' : 'Sync SnapRAID'}
+            {activeAction === 'sync' ? 'Lanzando sync...' : 'Sync SnapRAID'}
+          </button>
+          <button
+            onClick={() => void scrubPool()}
+            disabled={saving}
+            className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all disabled:opacity-60"
+          >
+            {activeAction === 'scrub' ? 'Lanzando scrub...' : 'Scrub SnapRAID'}
           </button>
         </div>
       </div>
@@ -157,7 +200,7 @@ export default function StoragePool() {
                   </div>
                   <div>
                     <h3 className="text-xl font-black text-white">{pool.name}</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">{pool.type} • {pool.disks.length} rutas</p>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">{pool.type} - {pool.disks.length} rutas</p>
                   </div>
                 </div>
                 <div className={`flex items-center space-x-3 px-4 py-2 rounded-full border ${pool.healthy ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
@@ -216,14 +259,14 @@ export default function StoragePool() {
           {pools.length === 0 && (
             <div className="py-20 text-center bg-slate-900/20 border-2 border-dashed border-white/5 rounded-[3rem]">
               <Shield className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
-              <p className="text-slate-500 font-bold">No se han detectado pools todavía</p>
+              <p className="text-slate-500 font-bold">No se han detectado pools todavia</p>
             </div>
           )}
         </div>
 
         <div className="space-y-8">
           <div className="bg-slate-900/40 backdrop-blur-md border border-white/5 rounded-[2.5rem] p-8">
-            <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Estado de protección</h2>
+            <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Estado de proteccion</h2>
             <div className="space-y-4">
               <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Estado</p>
@@ -239,9 +282,15 @@ export default function StoragePool() {
                 </div>
               </div>
               <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Última sync</p>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Ultima sync</p>
                 <p className="text-sm font-black text-white">
-                  {poolStatus?.lastSync ? new Date(poolStatus.lastSync).toLocaleString() : 'Sin registros aún'}
+                  {poolStatus?.lastSync ? new Date(poolStatus.lastSync).toLocaleString() : 'Sin registros aun'}
+                </p>
+              </div>
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Ultimo scrub</p>
+                <p className="text-sm font-black text-white">
+                  {poolStatus?.lastScrub ? new Date(poolStatus.lastScrub).toLocaleString() : 'Sin registros aun'}
                 </p>
               </div>
             </div>
@@ -280,7 +329,7 @@ export default function StoragePool() {
               disabled={saving}
               className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all disabled:opacity-60"
             >
-              {saving ? 'Guardando...' : 'Persistir configuración'}
+              {activeAction === 'save' ? 'Guardando...' : 'Persistir configuracion'}
             </button>
           </form>
         </div>
@@ -289,7 +338,7 @@ export default function StoragePool() {
       <div className="p-8 bg-amber-500/5 border border-amber-500/10 rounded-[2.5rem] flex items-start space-x-4">
         <AlertCircle className="w-6 h-6 text-amber-500 mt-1" />
         <p className="text-xs text-slate-400 font-medium leading-relaxed">
-          La creación del pool escribe MergerFS en `fstab` y, si indicas un disco de paridad, genera también `snapraid.conf`. Antes de usarlo en producción conviene revisar permisos y puntos de montaje reales en la Raspberry Pi.
+          La creacion del pool escribe MergerFS en `fstab` y, si indicas un disco de paridad, genera tambien `snapraid.conf`. Antes de usarlo en produccion conviene revisar permisos y puntos de montaje reales en la Raspberry Pi.
         </p>
       </div>
     </div>

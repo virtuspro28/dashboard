@@ -31,8 +31,17 @@ router.get("/pool/status", async (_req, res) => {
 
 router.post("/pool/sync", async (_req, res) => {
   try {
-    SnapRaidService.runSync();
+    await SnapRaidService.runSync();
     res.json({ success: true, message: "Sincronizacion iniciada en segundo plano" });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: getMsg(error) });
+  }
+});
+
+router.post("/pool/scrub", async (_req, res) => {
+  try {
+    await SnapRaidService.runScrub();
+    res.json({ success: true, message: "Scrub iniciado en segundo plano" });
   } catch (error: unknown) {
     res.status(500).json({ success: false, error: getMsg(error) });
   }

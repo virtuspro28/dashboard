@@ -55,6 +55,13 @@ async function ensureGlobalStatus() {
   });
 }
 
+async function ensureIdleState() {
+  const current = await ensureGlobalStatus();
+  if (current.status === "syncing" || current.status === "scrubbing") {
+    throw new Error("Ya hay una operacion de SnapRAID en curso.");
+  }
+}
+
 async function readOptionalFile(filePath: string): Promise<string> {
   try {
     return await fs.readFile(filePath, "utf-8");
@@ -198,7 +205,7 @@ export const SnapRaidService = {
   },
 
   async runSync() {
-    await ensureGlobalStatus();
+    await ensureIdleState();
     log.info("Iniciando SnapRAID Sync...");
 
     await prisma.storagePool.update({
@@ -235,6 +242,47 @@ export const SnapRaidService = {
         },
       });
       log.info(`SnapRAID Sync finalizado con codigo ${code}`);
+    });
+  },
+
+  async runScrub() {
+    await ensureIdleState();
+    log.info("Iniciando SnapRAID Scrub...");
+
+    await prisma.storagePool.update({
+      where: { id: "global" },
+      data: { status: "scrubbing", progress: 0 },
+    });
+
+    if (config.platform.isWindows) {
+      this.simulateProcess("scrubbing", "lastScrub");
+      return;
+    }
+
+    const child = spawn("sudo", ["snapraid", "scrub"]);
+
+    child.stdout.on("data", async (data: Buffer) => {
+      const output = data.toString();
+      const match = output.match(/(\d+)%/);
+      if (match) {
+        const progress = parseInt(match[1] ?? "0", 10);
+        await prisma.storagePool.update({
+          where: { id: "global" },
+          data: { progress },
+        });
+      }
+    });
+
+    child.on("close", async (code: number | null) => {
+      await prisma.storagePool.update({
+        where: { id: "global" },
+        data: {
+          status: code === 0 ? "idle" : "error",
+          progress: code === 0 ? 100 : 0,
+          lastScrub: code === 0 ? new Date() : null,
+        },
+      });
+      log.info(`SnapRAID Scrub finalizado con codigo ${code}`);
     });
   },
 
