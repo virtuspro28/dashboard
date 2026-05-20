@@ -199,6 +199,7 @@ ensure_env_file() {
   upsert_env_var "PORT" "$BACKEND_PORT"
   upsert_env_var "DATA_DIR" "$DATA_DIR"
   upsert_env_var "STORAGE_BASE_PATH" "$DATA_DIR"
+  upsert_env_var "FILE_MANAGER_ROOT_PATH" "/"
   upsert_env_var "HOMEVAULT_DATA_ROOT" "$DATA_DIR"
   upsert_env_var "HOMEVAULT_REMOTE_ROOT" "$REMOTE_MOUNT_DIR"
   upsert_env_var "HOMEVAULT_SERVICE_NAME" "$SERVICE_NAME"

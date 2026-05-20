@@ -64,6 +64,7 @@ export interface AppConfig {
   /** Configuración del Gestor de Archivos (Fase 10) */
   readonly storage: {
     readonly basePath: string;
+    readonly fileManagerRoot: string;
   };
 
   /** Información de plataforma (calculada una vez) */
@@ -129,6 +130,7 @@ const dataDir = path.resolve(
 );
 const databasePath = databasePathFromEnv ?? path.join(dataDir, "homevault.db");
 const storageRoot = path.resolve(process.env["STORAGE_BASE_PATH"]?.trim() || dataDir);
+const fileManagerRoot = path.resolve(process.env["FILE_MANAGER_ROOT_PATH"]?.trim() || path.sep);
 const remoteRoot = path.resolve(
   process.env["HOMEVAULT_REMOTE_ROOT"]?.trim()
   || (env === "production" ? "/opt/homevault/remote" : path.join(PROJECT_ROOT, "remote")),
@@ -136,6 +138,7 @@ const remoteRoot = path.resolve(
 
 process.env["DATA_DIR"] = dataDir;
 process.env["STORAGE_BASE_PATH"] = storageRoot;
+process.env["FILE_MANAGER_ROOT_PATH"] = fileManagerRoot;
 process.env["HOMEVAULT_REMOTE_ROOT"] = remoteRoot;
 process.env["DATABASE_URL"] = `file:${databasePath}`;
 
@@ -178,6 +181,7 @@ export const config: AppConfig = Object.freeze({
 
   storage: Object.freeze({
     basePath: storageRoot,
+    fileManagerRoot,
   }),
 
   platform: Object.freeze({
