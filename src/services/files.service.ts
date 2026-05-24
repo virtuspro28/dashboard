@@ -4,7 +4,7 @@ import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
 const log = logger.child('files-service');
-const DEFAULT_STORAGE_ROOT = config.paths.data;
+const DEFAULT_FILE_MANAGER_ROOT = config.storage.fileManagerRoot;
 
 function normalizeRequestedPath(reqPath: string = ''): string {
   const trimmed = String(reqPath ?? '').trim();
@@ -18,21 +18,21 @@ function normalizeRequestedPath(reqPath: string = ''): string {
 
 export interface FileItem {
   name: string;
-  path: string; // Relative path from storage root
+  path: string; // Virtual path relative to the file manager root
   isDirectory: boolean;
   size: number;
   extension: string;
   mtime: Date;
 }
 
-function getStorageBasePath(): string {
-  const configuredBasePath = String(config.storage.basePath ?? '').trim();
-  const basePath = configuredBasePath || DEFAULT_STORAGE_ROOT;
+function getFileManagerBasePath(): string {
+  const configuredBasePath = String(config.storage.fileManagerRoot ?? '').trim();
+  const basePath = configuredBasePath || DEFAULT_FILE_MANAGER_ROOT;
   return path.resolve(basePath);
 }
 
 export async function ensureStorageRootExists(): Promise<string> {
-  const basePath = getStorageBasePath();
+  const basePath = getFileManagerBasePath();
   await fs.mkdir(basePath, { recursive: true });
   return basePath;
 }
@@ -43,11 +43,11 @@ function isPathInside(basePath: string, targetPath: string): boolean {
 }
 
 /**
- * Validates that the target path is within the allowed BASE_STORAGE_PATH.
+ * Validates that the target path is within the allowed FILE_MANAGER_ROOT_PATH.
  * Prevents Path Traversal Attacks.
  */
 export function resolveStoragePath(reqPath: string = ''): string {
-  const base = getStorageBasePath();
+  const base = getFileManagerBasePath();
   const normalizedPath = normalizeRequestedPath(reqPath);
   const target = path.resolve(base, normalizedPath);
 
@@ -158,7 +158,7 @@ export async function renameItem(oldPath: string, newPath: string): Promise<void
  * Note: For very large drives, this should be optimized with an index.
  */
 export async function searchFiles(query: string, maxResults: number = 100): Promise<FileItem[]> {
-  const base = getStorageBasePath();
+  const base = getFileManagerBasePath();
   const results: FileItem[] = [];
   const lowercaseQuery = query.toLowerCase();
 
